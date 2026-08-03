@@ -67,6 +67,15 @@ docker build -t shiboq-dev .
 
 Windows で実行するには WebView2 ランタイムが必要です（Windows 11 は標準搭載）。
 
+## ダウンロード（Windows）
+
+ビルド済みの Windows 向け実行ファイルは
+[Releases](https://github.com/morststs/shiboq/releases/latest) から入手できます。
+
+`v*` タグ（例: `v0.1.0`）を push すると GitHub Actions が `windows-latest` 上で
+exe をビルドし、`shiboq-windows-amd64.zip`（exe 本体・LICENSE・
+THIRD_PARTY_LICENSES.md・README.md を同梱）を Release に自動添付します。
+
 ## ライセンス
 
 MIT License（[`LICENSE`](./LICENSE)）。

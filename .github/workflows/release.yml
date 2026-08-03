@@ -1,0 +1,72 @@
+name: Release Windows Build
+
+# v* タグ（例: v1.0.0）を push すると起動し、Windows exe をビルドして Release に添付する。
+# workflow_dispatch で既存タグを指定して手動実行することもできる。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release を作成するタグ名（例: v0.1.0）'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # wails build が npm install / vite build / go build をまとめて実行する。
+      # frontend/dist が生成されるのはこのステップなので、go test より先に行う
+      # （main.go の //go:embed all:frontend/dist がコンパイル時に実体を要求するため）。
+      - name: Build Windows binary
+        shell: bash
+        run: wails build -platform windows/amd64
+
+      # ビルドが通っただけでは中身の正しさは保証されないため、テストも実行する。
+      # 上の build で frontend/dist が出来ているのでここでは失敗しない。
+      - name: Run tests
+        shell: bash
+        run: go test ./...
+
+      # exe が大きいため zip 化して添付する。MIT / BSD / Apache いずれも
+      # 著作権表示の保持が再頒布条件なので、ライセンス表示物を同梱する。
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $staging = "release"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          Copy-Item build/bin/shiboq.exe $staging/
+          Copy-Item LICENSE $staging/
+          Copy-Item THIRD_PARTY_LICENSES.md $staging/
+          Copy-Item README.md $staging/
+          Compress-Archive -Path "$staging/*" -DestinationPath build/bin/shiboq-windows-amd64.zip -Force
+
+      - name: Upload zip to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: build/bin/shiboq-windows-amd64.zip
+          fail_on_unmatched_files: true
