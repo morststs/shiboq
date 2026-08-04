@@ -3,14 +3,18 @@
 ## プロジェクト概要
 
 jqコマンドを繰り返し実行して結果を確認できる、Wails v2 + Svelte 5 で構築した
-デスクトップアプリ（アプリ名: shiboq。「絞る」＋jqの「q」）。左から履歴・JSON/
-スキーマ・クエリ/結果の5ペイン構成（履歴ペインはドラッグで幅を調整できる。
-後述「App.svelteの並行処理」の下、「履歴ペインの幅（スプリッター）」参照）。
+デスクトップアプリ（アプリ名: shiboq。「絞る」＋jqの「q」）。左から保存・JSON/
+スキーマ・クエリ/結果の5ペイン構成（保存ペインはドラッグで幅を調整できる。
+後述「App.svelteの並行処理」の下、「保存ペインの幅（スプリッター）」参照）。
 JSON/クエリの編集後500ms（デバウンス）でスキーマ再推論・使用キー抽出・
-クエリ実行を自動的にまとめて行い、クエリ実行が成功し、かつ直近の履歴エントリと
-(JSON, クエリ)が同一でない場合のみ履歴として自動保存する。実行履歴は
-`~/.shiboq/history/{UUID}.json` に保存される
-（保存件数は200件を上限に、古いものから自動的に間引かれる）。
+クエリ実行を自動的にまとめて行う。**保存は自動ではなくユーザーの明示的な操作**で、
+保存項目は `~/.shiboq/saved/{UUID}.json` に保存される（件数の上限も自動間引きも無い。
+ユーザーが意図して保存したものを黙って消さないため）。
+
+以前は実行成功のたびに自動保存する「履歴」だったが、jqはキーが無くても`null`を返し
+エラーにしないため`.a`→`.add`→`.address`のような入力途中がほぼ全て「成功」として
+残ってしまい、一覧が意図しない項目で埋まっていた。そのため明示的な保存に変更した
+（旧`~/.shiboq/history/`は起動時に`saved/`へ自動移行する。後述`migrateLegacyHistoryDir`）。
 
 参考プロジェクト: [morststs/sirusita](https://github.com/morststs/sirusita)（Wails v2 + Svelte 5 + Monaco構成のメモアプリ）。
 技術スタック・開発環境・永続化パターンを踏襲している。
@@ -24,7 +28,7 @@ JSON/クエリの編集後500ms（デバウンス）でスキーマ再推論・�
   フル機能のJSON言語サービス（検証・スキーマ対応補完・ホバー）+ 独自言語ID `jq` による
   簡易補完（後述「Monaco構成の注意点」参照）
 - **UIフレームワーク:** flowbite-svelte 1.x（`Button`, `Badge` を使用）+ TailwindCSS 4
-- **その他Go依存:** `github.com/google/uuid`（履歴ファイル名）
+- **その他Go依存:** `github.com/google/uuid`（保存ファイル名）
 - **フォント:** Google Fonts（Noto Sans JP / Source Code Pro）へのCDN参照は使わない。
   デスクトップアプリが起動のたびに外部ドメインへ通信するのは望ましくなく
   （オフライン時に失敗する・利用シグナルが漏れる）、`style.css`のフォント
@@ -94,14 +98,14 @@ docker build -t shiboq-dev .
 
 ```
 shiboq/
-├── main.go                # Wails エントリポイント、App/JqService/HistoryServiceのBind
+├── main.go                # Wails エントリポイント、App/JqService/SavedServiceのBind + 旧履歴ディレクトリの移行
 ├── app.go                 # App構造体（ライフサイクル + OpenJSONFile）
 ├── jq_service.go          # gojqによるクエリ実行・エラー整形・使用キー抽出(AST解析)
 ├── schema.go              # JSON値からキーツリー（型付き）を推論
-├── history_service.go     # 履歴CRUD（~/.shiboq/history/*.json）
+├── saved_service.go       # 保存項目のCRUD（~/.shiboq/saved/*.json）+ 旧history/からの移行
 ├── jq_service_test.go     # jq_service.goのテスト（テストケースごとに個別のfunc、テーブル駆動ではない）
 ├── schema_test.go         # schema.goのテスト（同上）
-├── history_service_test.go # history_service.goのテスト（同上）
+├── saved_service_test.go  # saved_service.goのテスト（同上）
 ├── app_test.go            # app.goの一部（readJSONFileWithLimit）のテスト（同上）
 │                          #   ※ main.goにはテストが無い。app.goのOpenJSONFile自体は
 │                          #   ネイティブダイアログに依存するためテスト不可、サイズ
@@ -124,7 +128,7 @@ shiboq/
 │   │   ├── monaco.js           # Monaco Editorの構成 + 'jq'言語ID登録（後述「Monaco構成の注意点」）
 │   │   ├── jqCompletions.js    # jqクエリペイン用のMonaco補完プロバイダ
 │   │   ├── App.svelte          # ルート（状態管理 + 5ペインのレイアウト + 自動実行パイプライン。後述「App.svelteの並行処理」）
-│   │   ├── HistoryPane.svelte  # 左ペイン：実行履歴一覧
+│   │   ├── SavedPane.svelte    # 左ペイン：保存項目一覧（＋保存ボタン・各行の削除ボタン）
 │   │   ├── JsonPane.svelte     # 中央上ペイン：元のJSON（編集可、Monaco）
 │   │   ├── SchemaPane.svelte   # 中央下ペイン：キーツリー（使用中キーをハイライト）
 │   │   ├── SchemaTreeNode.svelte # スキーマツリーの再帰描画コンポーネント
@@ -178,15 +182,28 @@ shiboq/
 `encoding/json`がMarshalできないため、`normalizeNonFiniteFloats`で
 再帰的に`null`へ正規化してから整形する（本物のjqの`nan`表示に合わせている）。
 
-### HistoryService（history_service.go）
+### SavedService（saved_service.go）
+
+`SavedItem` は `{id, name, json, query, result, createdAt}`。`name` は任意入力で、
+空の場合はフロントエンド側が代わりに `query` を一覧の見出しに使う。
 
 | メソッド | 説明 |
 |---------|------|
-| `SaveHistory(entry)` | 履歴を保存する。IDが空ならUUIDを発行する（空でない場合はUUID形式を検証）。直近（最新）のエントリと`(JSON, Query)`が完全一致する場合は新規ファイルを書き込まずスキップし、既存エントリをそのまま返す（jqはキー不在時に`null`を返すだけでエラーにしないため、対策が無いと`.address.city`と打つ間の`.a`・`.add`・`.addr`…が全て履歴に残ってしまう）。保存後は`MaxEntries`（デフォルト200件、`defaultMaxHistoryEntries`）を超えた古いエントリを間引く（`pruneOldEntries`）。書き込みは同ディレクトリへの一時ファイル作成＋`os.Rename`によるアトミック書き込み |
-| `ListHistory()` | 履歴を新しい順（CreatedAt降順、同時刻は ID降順でタイブレーク＝`sort.SliceStable`）で返す。IDが空・不正な形式（UUID以外）のエントリは、Svelteの`{#each ... (entry.id)}`キー重複による例外を防ぐため除外する |
-| `DeleteHistory(id)` | 履歴を削除する（削除UIは未実装、APIのみ） |
+| `SaveItem(item)` | 保存項目を書き込む。IDが空ならUUIDを発行する（空でない場合はUUID形式を検証）。**内容が既存と同一でも必ず新規保存する**（明示的な操作を黙って無視しないため）。書き込みは同ディレクトリへの一時ファイル作成＋`os.Rename`によるアトミック書き込み |
+| `ListSaved()` | 保存項目を新しい順（CreatedAt降順、同時刻は ID降順でタイブレーク＝`sort.SliceStable`）で返す。IDが空・不正な形式（UUID以外）の項目は、Svelteの`{#each ... (item.id)}`キー重複による例外を防ぐため除外する |
+| `DeleteSaved(id)` | 保存項目を削除する |
 
-履歴ディレクトリは`0700`、ファイルは`0600`で作成する（貼り付けたJSONに
+`migrateLegacyHistoryDir(legacyDir, savedDir)`（Wailsにはバインドしない内部関数）は、
+旧「履歴」時代の`~/.shiboq/history`を`saved`へ`os.Rename`で移行する。
+**`saved`が未作成で、かつ`history`が存在する場合のみ**実行する。`main.go`で
+`NewSavedService`より**前に**呼ぶ必要がある（先に`NewSavedService`が`saved`を
+作ってしまうと移行済みと判定される）。失敗しても警告を出して起動は継続する。
+
+かつて持っていた「直近と同一内容ならスキップ」「200件を超えたら古いものを間引く」は
+どちらも削除した。自動保存が前提の仕組みであり、明示的な保存では
+「押したのに増えない」「意図して残したものが消える」という不具合になるため。
+
+保存ディレクトリは`0700`、ファイルは`0600`で作成する（貼り付けたJSONに
 トークンやPIIが含まれ得るため、他ユーザーから読めないようにする）。
 
 ## Monaco構成の注意点（frontend/src/monaco.js）
@@ -222,7 +239,7 @@ jq組み込み関数（`map`, `select`, `keys` 等）を候補として返す補
 
 ## App.svelteの並行処理（フロントエンド）
 
-`evaluate()`（JSON/スキーマ/使用キー/クエリ実行をまとめて行う自動実行パイプライン）は、
+`evaluate()`（スキーマ推論・使用キー抽出・クエリ実行をまとめて行う自動実行パイプライン）は、
 JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時には複数回の`evaluate()`が
 同時に飛行中になり得る。古い呼び出しが新しい呼び出しの結果を上書きしないよう、
 以下のガードを設けている。将来編集する際もこれらのガードを外さないこと。
@@ -230,25 +247,14 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 - **`evaluateToken`:** `evaluate()`開始時にインクリメントして捕捉するモノトニックなトークン。
   各`await`の直後（catchブロックも含む）で `if (token !== evaluateToken) return;` を行い、
   トークンが変わっていれば（＝自分より新しい呼び出しが既に始まっていれば）状態を一切書き込まずに中断する。
-- **`historyRequestToken`:** `refreshHistory()`自身の呼び出しごとに採番するトークン。
-  `onMount`と`evaluate()`の両方から呼ばれるため、古い呼び出しの`ListHistory()`応答が
+- **`savedRequestToken`:** `refreshSaved()`自身の呼び出しごとに採番するトークン。
+  `onMount`と保存/削除の完了後から呼ばれるため、古い呼び出しの`ListSaved()`応答が
   新しい呼び出しの応答より後に返ってきても、一覧を古い内容で上書きしないように自己ガードする。
 - **デバウンスの`$effect`:** `setTimeout(evaluate, 500)`をセットし、`clearTimeout`する
   ティアダウン関数を返す。エフェクトの再実行・アンマウント時に前回のタイマーを確実に破棄する。
-- **`restoredSignature`（履歴復元後の再保存抑制）:** 履歴から復元した直後、その内容のまま
-  評価しても再度履歴に保存しないようにするための仕組み。単純なbooleanフラグだと
-  「復元後、次に実行される`evaluate()`」の内容がどうであれ無条件に保存をスキップしてしまい、
-  復元後に内容を編集して実行した正当な結果まで保存されずに失われるバグになる。
-  そのため、復元した内容そのものの署名（`signatureOf(json, query)` = `JSON.stringify([json, query])`）
-  を保持し、`evaluate()`が実際に評価する内容の署名と一致する場合に限りスキップする。
-  内容が変化すれば自然に「復元済み」とはみなされなくなるため、明示的にnullへ戻す処理は不要。
-  **初期値はSAMPLE_JSON＋初期クエリ（`.name`）の署名にしてある。** `null`のままだと、
-  起動直後（未操作）にマウント時の最初の`evaluate()`がこの初期状態を新規実行結果として
-  履歴に保存してしまい、アプリを起動するだけで（何も操作しなくても）履歴が1件増える
-  （起動50回で同一内容の履歴が50件になる）。この初期化は、後から偶然まったく同じ内容
-  （SAMPLE_JSON＋`.name`）に戻した場合の保存も同様にスキップする、という既知のトレード
-  オフを伴う（`restoreHistory()`後に元の内容へ戻した場合と同じ性質の制約であり、新規に
-  持ち込んだものではない）。
+`evaluate()`は保存を行わない（保存はユーザーの明示操作のみ）。かつて自動保存だった頃は
+「復元直後の内容を再保存しない」ための`restoredSignature`という仕組みを持っていたが、
+自動保存の廃止に伴い不要になったため削除した。
 
 ### エラー表示の振り分けと結果ペインの陳腐化表示
 
@@ -265,29 +271,43 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 - `schemaError`にはバックエンド（`schema.go`）のエラーメッセージ（`invalid character
   'x' at offset N`等）をそのまま表示する。汎用文言に潰さない。
 
-### 履歴ペインの幅（スプリッター）
+### 保存ペインの幅（スプリッター）
 
-`historyWidth`（`$state`、初期値260px）をドラッグでリサイズできる。
+`savedWidth`（`$state`、初期値260px）をドラッグでリサイズできる。
 参考プロジェクト [sirusita](https://github.com/morststs/sirusita) の`App.svelte`の
 `startDrag`/`onDrag`/`stopDrag`パターンを踏襲しており、`mousedown`で
 `window`に`mousemove`/`mouseup`リスナーを登録し、`mouseup`（`stopDrag`相当）で
-リスナーを解除して幅を`localStorage`（キー: `shiboq.historyWidth`）に保存する。
-`onDestroy`でも`stopHistoryDrag()`を呼び、ドラッグ中にアンマウントされても
-`window`リスナーが残留しないようにする。幅は`HISTORY_MIN_WIDTH`(160)〜
-`HISTORY_MAX_WIDTH`(500)にクランプする。中央/右列の上下比率（JSON/スキーマ、
+リスナーを解除して幅を`localStorage`（キー: `shiboq.savedWidth`）に保存する。
+`onDestroy`でも`stopSavedDrag()`を呼び、ドラッグ中にアンマウントされても
+`window`リスナーが残留しないようにする。幅は`SAVED_MIN_WIDTH`(160)〜
+`SAVED_MAX_WIDTH`(500)にクランプする。中央/右列の上下比率（JSON/スキーマ、
 クエリ/結果）は引き続き固定（`flex: 1`で等分、リサイズ不可）。
 
-### 履歴保存の失敗通知
+### 保存・削除の失敗通知
 
-`SaveHistory`が失敗した場合、実行結果自体は表示され続ける（評価パイプラインを
-壊さない）が、気づけないとユーザーは履歴が保存されていると誤解し続ける。
-そのため`showToast('履歴を保存できませんでした')`で3秒間のトースト通知を
-画面右下に出す（モーダルにはしない）。
+`SaveItem`/`DeleteSaved`が失敗した場合、気づけないとユーザーは保存/削除できたと
+誤解し続ける。
+そのため`showToast('保存できませんでした')` /
+`showToast('削除できませんでした')`で3秒間のトースト通知を画面右下に出す
+（モーダルにはしない）。
+
+### 保存・削除のUI
+
+保存ペインのヘッダー右端の「＋ 保存」ボタン、または`Ctrl+S`（`svelte:window`の
+`onkeydown`。WebViewの既定動作は`preventDefault`で抑止）で名前入力ダイアログを開く。
+名前は空でもよく、その場合は一覧にクエリが表示される（`SavedPane.displayLabel()`）。
+
+**エラー中は保存できない**（`canSave = !resultStale && errorMessage === '' && schemaError === ''`）。
+表示中の結果は前回成功時のもので、いま画面にあるJSON/クエリと対応しないため、
+保存すると内容が食い違うから。ボタンは無効化され、`title`で理由を示す。
+
+削除は各行のホバーで現れる×から確認ダイアログを経て実行する。削除したのが
+選択中の項目なら`selectedSavedId`を`null`に戻す（存在しないIDを指したままにしない）。
+両ダイアログとも`Esc`で閉じられる。
 
 ## 既知の制約（スコープ外）
 
 - 複数JSONドキュメントのタブ管理は無い
-- 履歴の削除UIは無い（バックエンドAPIのみ）
 - jqクエリ（QueryPane）のシンタックスハイライトは無い（独自トークナイザ未実装、補完のみ）。
   結果ペイン（ResultPane）は検証無しの簡易Monarchトークナイザ（`'jq-result'`）を持つ
 - 補完・使用キーハイライトはフラットなキー名一致であり、jqのパイプ位置に応じた
@@ -301,9 +321,10 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
   `gojq.WithFunction` で `test` 等を差し替えても組み込みが優先されるため、
   アプリ側で回避することはできない。該当フラグを渡した場合は、対応フラグを
   併記した日本語エラー（`unsupportedRegexFlagMessage`）を表示する
-- リサイズ可能なのは履歴ペインの幅のみ（スプリッター）。中央/右列の上下比率
+- リサイズ可能なのは保存ペインの幅のみ（スプリッター）。中央/右列の上下比率
   （JSON/スキーマ、クエリ/結果）は`flex: 1`で等分固定、リサイズ不可
-- 履歴ペインのスプリッターはマウスドラッグのみで、キーボード操作の代替手段は無い
+- 保存ペインのスプリッターはマウスドラッグのみで、キーボード操作の代替手段は無い
+- 保存項目のリネーム・並べ替え・検索・タグ付け・エクスポートは無い
 - 単一の`RunWithContext`呼び出し内で大きな値を1回で構築するクエリ（例:
   `[range(100000000)]`のように出力自体は1件だが構築コストが大きいもの）は、
   Timeoutで最終的には打ち切られるが、打ち切りまでの間にメモリを消費し得る。
@@ -322,4 +343,4 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 
 `os.UserHomeDir()` の取得に失敗した場合、相対パスへのフォールバックはせず、
 日本語のエラーメッセージを出力して `os.Exit(1)` でただちに起動を中断する
-（履歴保存先が意図せず作業ディレクトリ配下になることを防ぐため）。
+（保存先が意図せず作業ディレクトリ配下になることを防ぐため）。

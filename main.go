@@ -37,8 +37,16 @@ func main() {
 		println("エラー: ホームディレクトリを取得できませんでした:", err.Error())
 		os.Exit(1)
 	}
-	historyDir := filepath.Join(homeDir, ".shiboq", "history")
-	historyService := NewHistoryService(historyDir)
+	savedDir := filepath.Join(homeDir, ".shiboq", "saved")
+	// 旧「履歴」時代の ~/.shiboq/history を保存先へ移行する（保存先が未作成の
+	// 場合のみ）。NewSavedService より前に呼ぶ必要がある（先に呼ぶと保存先が
+	// 作られてしまい、移行が「済み」と判定されてしまう）。
+	// 失敗しても起動は続ける（保存先が空で始まるだけで致命的ではない）。
+	legacyDir := filepath.Join(homeDir, ".shiboq", "history")
+	if _, err := migrateLegacyHistoryDir(legacyDir, savedDir); err != nil {
+		println("警告: 旧履歴データの移行に失敗しました:", err.Error())
+	}
+	savedService := NewSavedService(savedDir)
 
 	err = wails.Run(&options.App{
 		Title:  "shiboq",
@@ -53,7 +61,7 @@ func main() {
 		Bind: []interface{}{
 			app,
 			jqService,
-			historyService,
+			savedService,
 		},
 		Windows: &windows.Options{
 			Theme: windows.Dark,

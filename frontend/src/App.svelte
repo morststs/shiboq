@@ -1,5 +1,5 @@
 <script>
-  import HistoryPane from './HistoryPane.svelte';
+  import SavedPane from './SavedPane.svelte';
   import JsonPane from './JsonPane.svelte';
   import SchemaPane from './SchemaPane.svelte';
   import QueryPane from './QueryPane.svelte';
@@ -7,7 +7,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { OpenJSONFile } from '../wailsjs/go/main/App';
   import { RunQuery, ExtractUsedKeys, InferSchema } from '../wailsjs/go/main/JqService';
-  import { SaveHistory, ListHistory } from '../wailsjs/go/main/HistoryService';
+  import { SaveItem, ListSaved, DeleteSaved } from '../wailsjs/go/main/SavedService';
 
   const SAMPLE_JSON = '{\n  "name": "taro",\n  "age": 20,\n  "tags": ["admin", "user"],\n  "address": {\n    "city": "tokyo"\n  }\n}';
 
@@ -28,8 +28,12 @@
   let schemaNodes = $state([]);
   let schemaError = $state('');
   let usedKeys = $state(new Set());
-  let historyEntries = $state([]);
-  let selectedHistoryId = $state(null);
+  let savedItems = $state([]);
+  let selectedSavedId = $state(null);
+  // 名前入力ダイアログ・削除確認ダイアログの状態。
+  let saveDialogOpen = $state(false);
+  let saveDialogName = $state('');
+  let deleteTargetId = $state(null);
   let toastMessage = $state('');
   let toastTimer = null;
 
@@ -56,24 +60,6 @@
   // 古い呼び出しは以降の状態更新を一切行わずに黙って中断する。
   let evaluateToken = 0;
 
-  // 復元直後の内容をそのまま履歴に再保存しないためのシグネチャ。
-  // 単純なbooleanだと「復元後・次に実行されるevaluate()」がどんな内容でも
-  // 無条件に保存をスキップしてしまい、復元後に別の内容へ編集した場合の
-  // 正当な実行結果まで保存されずに失われる。復元した内容そのものの
-  // シグネチャを保持し、evaluate()が実際に評価する内容と一致する場合に限り
-  // スキップすることで、内容が変化すれば自然に「復元済み」とはみなされなく
-  // なるようにする（明示的にnullへ戻す必要はない）。
-  //
-  // 初期値をSAMPLE_JSON/初期クエリの署名にしておくことが重要。そうしないと、
-  // 起動直後（未編集）にマウント時の最初のevaluate()が走った際、この初期状態を
-  // 「新規の実行結果」として履歴に保存してしまい、アプリを起動して何も操作
-  // しなくても履歴が1件増えてしまう（起動50回で同一内容の履歴が50件になる）。
-  let restoredSignature = signatureOf(SAMPLE_JSON, '.name');
-
-  function signatureOf(json, q) {
-    return JSON.stringify([json, q]);
-  }
-
   function showToast(message) {
     toastMessage = message;
     clearTimeout(toastTimer);
@@ -82,21 +68,21 @@
     }, 3000);
   }
 
-  // refreshHistory()自身の呼び出しごとに採番するトークン。
-  // onMount と evaluate() の両方から呼ばれるため、古い呼び出しの
-  // ListHistory() 応答が新しい呼び出しの応答より後に返ってきても、
+  // refreshSaved()自身の呼び出しごとに採番するトークン。
+  // onMount と保存/削除の後から呼ばれるため、古い呼び出しの
+  // ListSaved() 応答が新しい呼び出しの応答より後に返ってきても、
   // 一覧を古い内容で上書きしないようにする。
-  let historyRequestToken = 0;
+  let savedRequestToken = 0;
 
-  async function refreshHistory() {
-    const requestToken = ++historyRequestToken;
+  async function refreshSaved() {
+    const requestToken = ++savedRequestToken;
     try {
-      const list = (await ListHistory()) ?? [];
-      if (requestToken !== historyRequestToken) return;
-      historyEntries = list;
+      const list = (await ListSaved()) ?? [];
+      if (requestToken !== savedRequestToken) return;
+      savedItems = list;
     } catch (e) {
-      if (requestToken !== historyRequestToken) return;
-      historyEntries = [];
+      if (requestToken !== savedRequestToken) return;
+      savedItems = [];
     }
   }
 
@@ -112,7 +98,6 @@
     // 開始時点の設定で一貫した結果を返す（新しい設定での実行は新しい
     // evaluate()が担当し、tokenガードで古い方が捨てられる）。
     const currentRaw = rawOutput;
-    const shouldSkipSave = restoredSignature !== null && restoredSignature === signatureOf(currentJson, currentQuery);
 
     try {
       const nodes = (await InferSchema(currentJson)) ?? [];
@@ -163,20 +148,6 @@
     errorMessage = '';
     resultStale = false;
     result = r.result;
-
-    if (!shouldSkipSave) {
-      try {
-        const saved = await SaveHistory({ json: currentJson, query: currentQuery, result: r.result });
-        if (token !== evaluateToken) return;
-        selectedHistoryId = saved.id;
-        await refreshHistory();
-      } catch (e) {
-        // 履歴保存に失敗しても実行結果自体は表示され続ける。ただし気づけないと
-        // ユーザーは履歴が保存されていると誤解し続けるので、控えめに通知する。
-        if (token !== evaluateToken) return;
-        showToast('履歴を保存できませんでした');
-      }
-    }
   }
 
   $effect(() => {
@@ -200,16 +171,87 @@
     evaluate();
   }
 
-  function restoreHistory(id) {
-    const entry = historyEntries.find((e) => e.id === id);
-    if (!entry) return;
-    restoredSignature = signatureOf(entry.json, entry.query);
-    jsonText = entry.json;
-    query = entry.query;
-    result = entry.result;
+  function restoreSaved(id) {
+    const item = savedItems.find((i) => i.id === id);
+    if (!item) return;
+    jsonText = item.json;
+    query = item.query;
+    result = item.result;
     errorMessage = '';
     resultStale = false;
-    selectedHistoryId = entry.id;
+    selectedSavedId = item.id;
+  }
+
+  // --- 保存 ---
+
+  // 実行がエラー中は保存させない。表示中の結果は前回成功時のもので、
+  // いま画面にあるJSON/クエリと対応しないため、保存すると内容が食い違う。
+  let canSave = $derived(!resultStale && errorMessage === '' && schemaError === '');
+  const SAVE_DISABLED_REASON = 'エラーを解消してから保存してください（表示中の結果は現在の内容と対応していません）';
+
+  function openSaveDialog() {
+    if (!canSave) return;
+    saveDialogName = '';
+    saveDialogOpen = true;
+  }
+
+  function cancelSave() {
+    saveDialogOpen = false;
+  }
+
+  async function confirmSave() {
+    saveDialogOpen = false;
+    try {
+      const saved = await SaveItem({
+        name: saveDialogName.trim(),
+        json: jsonText,
+        query,
+        result,
+      });
+      selectedSavedId = saved.id;
+      await refreshSaved();
+    } catch (e) {
+      showToast('保存できませんでした');
+    }
+  }
+
+  // --- 削除 ---
+
+  let deleteTarget = $derived(savedItems.find((i) => i.id === deleteTargetId) ?? null);
+
+  function requestDelete(id) {
+    deleteTargetId = id;
+  }
+
+  function cancelDelete() {
+    deleteTargetId = null;
+  }
+
+  async function confirmDelete() {
+    const id = deleteTargetId;
+    deleteTargetId = null;
+    if (!id) return;
+    try {
+      await DeleteSaved(id);
+      // 選択中のものを消したら選択を外す（存在しないIDを指したままにしない）。
+      if (selectedSavedId === id) selectedSavedId = null;
+      await refreshSaved();
+    } catch (e) {
+      showToast('削除できませんでした');
+    }
+  }
+
+  // Ctrl+S でも保存ダイアログを開く。ブラウザ/WebViewの既定動作（ページ保存）は抑止する。
+  function handleKeydown(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      openSaveDialog();
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (saveDialogOpen) cancelSave();
+      else if (deleteTargetId) cancelDelete();
+    }
   }
 
   async function handleOpenFile() {
@@ -225,57 +267,67 @@
     }
   }
 
-  // 履歴ペインの幅（スプリッターでリサイズ可能）。参考プロジェクト sirusita
+  // 保存ペインの幅（スプリッターでリサイズ可能）。参考プロジェクト sirusita
   // (https://github.com/morststs/sirusita) のstartDrag/onDrag/stopDragパターンを
   // 踏襲し、localStorageへ幅を永続化する。
-  const HISTORY_WIDTH_STORAGE_KEY = 'shiboq.historyWidth';
+  const SAVED_WIDTH_STORAGE_KEY = 'shiboq.savedWidth';
   const RAW_OUTPUT_STORAGE_KEY = 'shiboq.rawOutput';
-  const HISTORY_MIN_WIDTH = 160;
-  const HISTORY_MAX_WIDTH = 500;
-  let historyWidth = $state(260);
-  let draggingHistory = $state(false);
+  const SAVED_MIN_WIDTH = 160;
+  const SAVED_MAX_WIDTH = 500;
+  let savedWidth = $state(260);
+  let draggingSaved = $state(false);
 
-  function clampHistoryWidth(w) {
-    return Math.min(HISTORY_MAX_WIDTH, Math.max(HISTORY_MIN_WIDTH, w));
+  function clampSavedWidth(w) {
+    return Math.min(SAVED_MAX_WIDTH, Math.max(SAVED_MIN_WIDTH, w));
   }
 
-  function startHistoryDrag(e) {
-    draggingHistory = true;
+  function startSavedDrag(e) {
+    draggingSaved = true;
     e.preventDefault();
-    window.addEventListener('mousemove', onHistoryDrag);
-    window.addEventListener('mouseup', stopHistoryDrag);
+    window.addEventListener('mousemove', onSavedDrag);
+    window.addEventListener('mouseup', stopSavedDrag);
   }
 
-  function onHistoryDrag(e) {
-    historyWidth = clampHistoryWidth(e.clientX);
+  function onSavedDrag(e) {
+    savedWidth = clampSavedWidth(e.clientX);
   }
 
-  function stopHistoryDrag() {
-    if (!draggingHistory) return;
-    draggingHistory = false;
-    localStorage.setItem(HISTORY_WIDTH_STORAGE_KEY, String(historyWidth));
-    window.removeEventListener('mousemove', onHistoryDrag);
-    window.removeEventListener('mouseup', stopHistoryDrag);
+  function stopSavedDrag() {
+    if (!draggingSaved) return;
+    draggingSaved = false;
+    localStorage.setItem(SAVED_WIDTH_STORAGE_KEY, String(savedWidth));
+    window.removeEventListener('mousemove', onSavedDrag);
+    window.removeEventListener('mouseup', stopSavedDrag);
   }
 
   onMount(() => {
-    const savedWidth = parseInt(localStorage.getItem(HISTORY_WIDTH_STORAGE_KEY), 10);
-    if (!isNaN(savedWidth)) {
-      historyWidth = clampHistoryWidth(savedWidth);
+    const storedWidth = parseInt(localStorage.getItem(SAVED_WIDTH_STORAGE_KEY), 10);
+    if (!isNaN(storedWidth)) {
+      savedWidth = clampSavedWidth(storedWidth);
     }
     rawOutput = localStorage.getItem(RAW_OUTPUT_STORAGE_KEY) === '1';
-    refreshHistory();
+    refreshSaved();
   });
 
   onDestroy(() => {
     clearTimeout(toastTimer);
-    stopHistoryDrag();
+    stopSavedDrag();
   });
 </script>
 
-<div class="app-layout" class:dragging={draggingHistory}>
-  <div class="history-col" style="width: {historyWidth}px">
-    <HistoryPane entries={historyEntries} selectedId={selectedHistoryId} onSelect={restoreHistory} />
+<svelte:window onkeydown={handleKeydown} />
+
+<div class="app-layout" class:dragging={draggingSaved}>
+  <div class="saved-col" style="width: {savedWidth}px">
+    <SavedPane
+      items={savedItems}
+      selectedId={selectedSavedId}
+      {canSave}
+      saveDisabledReason={SAVE_DISABLED_REASON}
+      onSelect={restoreSaved}
+      onRequestSave={openSaveDialog}
+      onRequestDelete={requestDelete}
+    />
   </div>
   <!-- ドラッグ操作のみのリサイズハンドル。sirusita（参考プロジェクト）のsplitterと同じ
        パターンで、キーボード操作の代替手段は無い（既知の制約、将来的にはrole="separator"
@@ -283,8 +335,8 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="splitter"
-    class:active={draggingHistory}
-    onmousedown={startHistoryDrag}
+    class:active={draggingSaved}
+    onmousedown={startSavedDrag}
     title="ドラッグで幅を調整"
   ></div>
   <div class="col">
@@ -296,6 +348,51 @@
     <div class="pane-slot"><ResultPane value={result} stale={resultStale} raw={rawOutput} onRawChange={handleRawChange} /></div>
   </div>
 </div>
+
+{#if saveDialogOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={cancelSave}>
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="modal" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-title">保存</div>
+      <div class="modal-body">
+        <label class="modal-label" for="save-name">名前（省略可）</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          id="save-name"
+          class="modal-input"
+          bind:value={saveDialogName}
+          placeholder={query}
+          autofocus
+          onkeydown={(e) => { if (e.key === 'Enter') confirmSave(); }}
+        />
+        <p class="modal-note">空のままにすると、一覧にはクエリが表示されます。</p>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick={cancelSave}>キャンセル</button>
+        <button class="modal-btn primary" onclick={confirmSave}>保存する</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if deleteTarget}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={cancelDelete}>
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="modal" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-title">削除の確認</div>
+      <div class="modal-body">
+        「{deleteTarget.name?.trim() ? deleteTarget.name : deleteTarget.query}」を削除します。<br />
+        この操作は元に戻せません。よろしいですか？
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick={cancelDelete}>キャンセル</button>
+        <button class="modal-btn danger" onclick={confirmDelete}>削除する</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if toastMessage}
   <div class="toast">{toastMessage}</div>
@@ -311,7 +408,7 @@
     cursor: col-resize;
     user-select: none;
   }
-  .history-col {
+  .saved-col {
     flex-shrink: 0;
   }
   .splitter {
@@ -342,6 +439,104 @@
   }
   .pane-slot:last-child {
     border-bottom: none;
+  }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+  }
+  .modal {
+    width: 380px;
+    max-width: calc(100vw - 40px);
+    background: #252526;
+    border: 1px solid #3c3c3c;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+  .modal-title {
+    padding: 14px 18px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #e7e7e7;
+    border-bottom: 1px solid #3c3c3c;
+  }
+  .modal-body {
+    padding: 18px;
+    color: #cccccc;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .modal-label {
+    display: block;
+    font-size: 12px;
+    color: #969696;
+    margin-bottom: 6px;
+  }
+  .modal-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: #1e1e1e;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    color: #cccccc;
+    font-family: inherit;
+    font-size: 14px;
+  }
+  .modal-input:focus {
+    outline: none;
+    border-color: #007acc;
+  }
+  .modal-note {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6a6a6a;
+    line-height: 1.5;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid #3c3c3c;
+  }
+  .modal-btn {
+    padding: 6px 16px;
+    border-radius: 4px;
+    border: 1px solid #3c3c3c;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .modal-btn.cancel {
+    background: #2d2d2d;
+    color: #cccccc;
+  }
+  .modal-btn.cancel:hover {
+    background: #3a3a3a;
+    color: #ffffff;
+  }
+  .modal-btn.primary {
+    background: #0e639c;
+    border-color: #0e639c;
+    color: #ffffff;
+  }
+  .modal-btn.primary:hover {
+    background: #1177bb;
+    border-color: #1177bb;
+  }
+  .modal-btn.danger {
+    background: #a1260d;
+    border-color: #a1260d;
+    color: #ffffff;
+  }
+  .modal-btn.danger:hover {
+    background: #c4341a;
+    border-color: #c4341a;
   }
   .toast {
     position: fixed;

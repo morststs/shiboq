@@ -1,7 +1,24 @@
 export namespace main {
 	
-	export class HistoryEntry {
+	export class RunResult {
+	    result: string;
+	    error: string;
+	    errorKind?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RunResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.result = source["result"];
+	        this.error = source["error"];
+	        this.errorKind = source["errorKind"];
+	    }
+	}
+	export class SavedItem {
 	    id: string;
+	    name: string;
 	    json: string;
 	    query: string;
 	    result: string;
@@ -9,12 +26,13 @@ export namespace main {
 	    createdAt: any;
 	
 	    static createFrom(source: any = {}) {
-	        return new HistoryEntry(source);
+	        return new SavedItem(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.name = source["name"];
 	        this.json = source["json"];
 	        this.query = source["query"];
 	        this.result = source["result"];
@@ -38,22 +56,6 @@ export namespace main {
 		    }
 		    return a;
 		}
-	}
-	export class RunResult {
-	    result: string;
-	    error: string;
-	    errorKind?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new RunResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.result = source["result"];
-	        this.error = source["error"];
-	        this.errorKind = source["errorKind"];
-	    }
 	}
 	export class SchemaNode {
 	    key: string;
