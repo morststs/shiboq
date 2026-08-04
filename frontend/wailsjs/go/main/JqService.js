@@ -10,6 +10,6 @@ export function InferSchema(arg1) {
   return window['go']['main']['JqService']['InferSchema'](arg1);
 }
 
-export function RunQuery(arg1, arg2) {
-  return window['go']['main']['JqService']['RunQuery'](arg1, arg2);
+export function RunQuery(arg1, arg2, arg3) {
+  return window['go']['main']['JqService']['RunQuery'](arg1, arg2, arg3);
 }

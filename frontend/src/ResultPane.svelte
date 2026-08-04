@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import monaco from './monaco.js';
 
-  let { value = '', stale = false } = $props();
+  let { value = '', stale = false, raw = false, onRawChange } = $props();
 
   let container;
   let editor;
@@ -45,6 +45,12 @@
     {#if stale}
       <span class="stale-badge">前回の成功結果</span>
     {/if}
+    <!-- jq の -r 相当。結果が文字列のときだけ引用符とエスケープを外す。
+         @csv / @tsv の結果が二重に引用符で包まれるのを避けるためのモード。 -->
+    <label class="raw-toggle" title="結果が文字列のとき、引用符とエスケープを外して表示します（jq の -r 相当）">
+      <input type="checkbox" checked={raw} onchange={(e) => onRawChange?.(e.currentTarget.checked)} />
+      <span>生出力 (-r)</span>
+    </label>
   </div>
   <div class="editor" class:stale bind:this={container}></div>
 </div>
@@ -73,6 +79,23 @@
     background: #5a4a1d;
     color: #e8c877;
     font-size: 11px;
+  }
+  /* 見出しの右端に寄せる。バッジの有無でトグルの位置が動かないようにする。 */
+  .raw-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .raw-toggle input {
+    margin: 0;
+    cursor: pointer;
+  }
+  .raw-toggle:hover {
+    color: #cccccc;
   }
   .editor {
     flex: 1;

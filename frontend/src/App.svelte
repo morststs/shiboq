@@ -22,6 +22,9 @@
   // クエリペインのエラーバーには出さない（下記evaluate()参照）が、その場合も
   // RunQueryは失敗しresultは更新されないため、resultStaleは独立して真にする。
   let resultStale = $state(false);
+  // jq の -r 相当。結果が文字列のときだけ引用符とエスケープを外して表示する。
+  // 既定はオフ（jq の既定の挙動に合わせる）。選択はlocalStorageに保存する。
+  let rawOutput = $state(false);
   let schemaNodes = $state([]);
   let schemaError = $state('');
   let usedKeys = $state(new Set());
@@ -105,6 +108,10 @@
     const token = ++evaluateToken;
     const currentJson = jsonText;
     const currentQuery = query;
+    // rawもawait前に確定させる。await中にトグルが変わっても、この実行は
+    // 開始時点の設定で一貫した結果を返す（新しい設定での実行は新しい
+    // evaluate()が担当し、tokenガードで古い方が捨てられる）。
+    const currentRaw = rawOutput;
     const shouldSkipSave = restoredSignature !== null && restoredSignature === signatureOf(currentJson, currentQuery);
 
     try {
@@ -134,7 +141,7 @@
 
     let r;
     try {
-      r = await RunQuery(currentJson, currentQuery);
+      r = await RunQuery(currentJson, currentQuery, currentRaw);
     } catch (e) {
       // RunQueryはIPC層のエラーで例外を投げることはまず無いはずだが、
       // 万一rejectされた場合にpanesが無反応のまま固まらないようにする。
@@ -179,6 +186,20 @@
     return () => clearTimeout(debounceTimer);
   });
 
+  // 生出力トグル。チェックボックスなので500msのデバウンスを待たせず、
+  // 保留中のタイマーを潰して即座に再実行する。tokenガードがあるため、
+  // 進行中のevaluate()と競合しても古い方の結果は書き込まれない。
+  function handleRawChange(next) {
+    rawOutput = next;
+    try {
+      localStorage.setItem(RAW_OUTPUT_STORAGE_KEY, next ? '1' : '0');
+    } catch (e) {
+      // localStorageが使えなくても表示自体は成立するので黙って続行する
+    }
+    clearTimeout(debounceTimer);
+    evaluate();
+  }
+
   function restoreHistory(id) {
     const entry = historyEntries.find((e) => e.id === id);
     if (!entry) return;
@@ -208,6 +229,7 @@
   // (https://github.com/morststs/sirusita) のstartDrag/onDrag/stopDragパターンを
   // 踏襲し、localStorageへ幅を永続化する。
   const HISTORY_WIDTH_STORAGE_KEY = 'shiboq.historyWidth';
+  const RAW_OUTPUT_STORAGE_KEY = 'shiboq.rawOutput';
   const HISTORY_MIN_WIDTH = 160;
   const HISTORY_MAX_WIDTH = 500;
   let historyWidth = $state(260);
@@ -241,6 +263,7 @@
     if (!isNaN(savedWidth)) {
       historyWidth = clampHistoryWidth(savedWidth);
     }
+    rawOutput = localStorage.getItem(RAW_OUTPUT_STORAGE_KEY) === '1';
     refreshHistory();
   });
 
@@ -270,7 +293,7 @@
   </div>
   <div class="col">
     <div class="pane-slot"><QueryPane value={query} onChange={(v) => (query = v)} {errorMessage} getKeys={() => Array.from(flatKeys)} /></div>
-    <div class="pane-slot"><ResultPane value={result} stale={resultStale} /></div>
+    <div class="pane-slot"><ResultPane value={result} stale={resultStale} raw={rawOutput} onRawChange={handleRawChange} /></div>
   </div>
 </div>
 

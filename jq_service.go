@@ -62,12 +62,17 @@ type RunResult struct {
 // 呼び出し側はErrorが空でない場合、結果ペインを更新してはいけない。
 // 複数の出力（`.a, .b` 等）は改行区切りで連結する。
 //
+// raw は jq の -r 相当。true のとき、結果が文字列の場合に限り引用符と
+// エスケープを外して出力する。@csv や @tsv の結果が二重に引用符で
+// 包まれて読めなくなるのを避けるためのモード。文字列以外は raw の値に
+// かかわらずJSON表現のまま出力する（jq -r と同じ挙動）。
+//
 // 実行はTimeoutで打ち切られ（gojqはcontextのキャンセルをIter.Next()から
 // エラー値として返す）、出力もMaxOutputs件・MaxOutputBytesバイトで打ち切る。
 // これらが無いと、500msデバウンスで自動実行される性質上、`repeat(.)`や
 // `range(1e9)`のような編集途中のクエリが終了しないgoroutineを量産し、
 // メモリを際限なく消費する。
-func (s *JqService) RunQuery(jsonText, query string) RunResult {
+func (s *JqService) RunQuery(jsonText, query string, raw bool) RunResult {
 	var input any
 	if err := json.Unmarshal([]byte(jsonText), &input); err != nil {
 		return RunResult{Error: "JSONの解析に失敗しました: " + err.Error(), ErrorKind: ErrorKindJSON}
@@ -122,6 +127,9 @@ func (s *JqService) RunQuery(jsonText, query string) RunResult {
 			if errors.Is(err, context.Canceled) {
 				return RunResult{Error: "実行がキャンセルされました", ErrorKind: ErrorKindRuntime}
 			}
+			if msg := unsupportedRegexFlagMessage(err); msg != "" {
+				return RunResult{Error: msg, ErrorKind: ErrorKindRuntime}
+			}
 			return RunResult{Error: "実行エラー: " + err.Error(), ErrorKind: ErrorKindRuntime}
 		}
 		count++
@@ -132,9 +140,16 @@ func (s *JqService) RunQuery(jsonText, query string) RunResult {
 			}
 		}
 		v = normalizeNonFiniteFloats(v)
-		b, err := json.MarshalIndent(v, "", "  ")
-		if err != nil {
-			return RunResult{Error: "結果の整形に失敗しました: " + err.Error(), ErrorKind: ErrorKindRuntime}
+		var b []byte
+		if s, ok := v.(string); ok && raw {
+			// jq -r 相当。文字列そのものを出力する。
+			b = []byte(s)
+		} else {
+			var err error
+			b, err = json.MarshalIndent(v, "", "  ")
+			if err != nil {
+				return RunResult{Error: "結果の整形に失敗しました: " + err.Error(), ErrorKind: ErrorKindRuntime}
+			}
 		}
 		totalBytes += len(b)
 		if totalBytes > maxBytes {
@@ -319,4 +334,41 @@ func walkPatternObjectForKeys(po *gojq.PatternObject, set map[string]bool) {
 	}
 	walkQueryForKeys(po.KeyQuery, set)
 	walkPatternForKeys(po.Val, set)
+}
+
+// unsupportedRegexFlagMessage は「正規表現フラグが未対応」のエラーを、
+// 原因と対処が分かる日本語メッセージに置き換える。該当しなければ空文字を返す。
+//
+// gojq の正規表現は Go の regexp を使うため、対応フラグは g/i/m のみで、
+// jq本家（Oniguruma）の x（拡張モード）・s・n・p・l は使えない。
+// 素のエラーは英語で "unsupported regular expression flag: \"ix\"" とだけ出るため、
+// どのフラグなら使えるのかが分からず原因にたどり着きにくい。
+func unsupportedRegexFlagMessage(err error) string {
+	const prefix = "unsupported regular expression flag: "
+	msg := err.Error()
+	i := strings.Index(msg, prefix)
+	if i < 0 {
+		return ""
+	}
+	flags := strings.Trim(strings.TrimSpace(msg[i+len(prefix):]), `"`)
+
+	// 実際に使えないフラグだけを挙げて示す。
+	var unsupported []string
+	for _, r := range flags {
+		if r != 'g' && r != 'i' && r != 'm' {
+			unsupported = append(unsupported, string(r))
+		}
+	}
+	detail := ""
+	if len(unsupported) > 0 {
+		detail = fmt.Sprintf("（%s は未対応）", strings.Join(unsupported, ", "))
+	}
+
+	return fmt.Sprintf(
+		"実行エラー: 正規表現フラグ %q は使用できません%s。"+
+			"使用できるのは g（全体一致）, i（大文字小文字を無視）, m（. を改行にも一致）の3つです。"+
+			"jq本家が対応している x（空白とコメントを無視）などは、"+
+			"本アプリが内蔵する jq エンジン（gojq）が対応していないため使えません。"+
+			"x を使っていた場合は、空白とコメントを取り除いた正規表現を直接書いてください。",
+		flags, detail)
 }

@@ -6,4 +6,4 @@ export function ExtractUsedKeys(arg1:string):Promise<Array<string>>;
 
 export function InferSchema(arg1:string):Promise<Array<main.SchemaNode>>;
 
-export function RunQuery(arg1:string,arg2:string):Promise<main.RunResult>;
+export function RunQuery(arg1:string,arg2:string,arg3:boolean):Promise<main.RunResult>;
