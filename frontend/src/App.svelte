@@ -6,7 +6,8 @@
   import ResultPane from './ResultPane.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { OpenJSONFile } from '../wailsjs/go/main/App';
-  import { RunQuery, ExtractUsedKeys, InferSchema } from '../wailsjs/go/main/JqService';
+  import { RunQuery, ExtractUsedKeys, InferSchema, SchemaJSON } from '../wailsjs/go/main/JqService';
+  import { ClipboardSetText } from '../wailsjs/runtime/runtime';
   import { SaveItem, ListSaved, DeleteSaved } from '../wailsjs/go/main/SavedService';
 
   const SAMPLE_JSON = '{\n  "name": "taro",\n  "age": 20,\n  "tags": ["admin", "user"],\n  "address": {\n    "city": "tokyo"\n  }\n}';
@@ -267,6 +268,21 @@
     }
   }
 
+  // スキーマをJSON Schema形式でクリップボードへコピーする。
+  // デバウンス後のschemaNodesではなく、押した時点のjsonTextから作る（編集直後に
+  // 押しても、画面のJSONと食い違う古いスキーマをコピーしないため）。
+  // navigator.clipboardはWebView（特にWebKitGTK）で許可されないことがあるため、
+  // WailsランタイムのクリップボードAPIを使う。
+  async function copySchema() {
+    try {
+      const schema = await SchemaJSON(jsonText);
+      const ok = await ClipboardSetText(schema);
+      showToast(ok ? 'スキーマをコピーしました' : 'コピーできませんでした');
+    } catch (e) {
+      showToast('コピーできませんでした');
+    }
+  }
+
   // 保存ペインの幅（スプリッターでリサイズ可能）。参考プロジェクト sirusita
   // (https://github.com/morststs/sirusita) のstartDrag/onDrag/stopDragパターンを
   // 踏襲し、localStorageへ幅を永続化する。
@@ -341,7 +357,7 @@
   ></div>
   <div class="col">
     <div class="pane-slot"><JsonPane value={jsonText} onChange={(v) => (jsonText = v)} onOpenFile={handleOpenFile} /></div>
-    <div class="pane-slot"><SchemaPane nodes={schemaNodes} {usedKeys} errorMessage={schemaError} /></div>
+    <div class="pane-slot"><SchemaPane nodes={schemaNodes} {usedKeys} errorMessage={schemaError} onCopy={copySchema} /></div>
   </div>
   <div class="col">
     <div class="pane-slot"><QueryPane value={query} onChange={(v) => (query = v)} {errorMessage} getKeys={() => Array.from(flatKeys)} /></div>

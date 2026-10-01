@@ -13,3 +13,7 @@ export function InferSchema(arg1) {
 export function RunQuery(arg1, arg2, arg3) {
   return window['go']['main']['JqService']['RunQuery'](arg1, arg2, arg3);
 }
+
+export function SchemaJSON(arg1) {
+  return window['go']['main']['JqService']['SchemaJSON'](arg1);
+}

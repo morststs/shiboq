@@ -101,7 +101,7 @@ shiboq/
 ├── main.go                # Wails エントリポイント、App/JqService/SavedServiceのBind + 旧履歴ディレクトリの移行
 ├── app.go                 # App構造体（ライフサイクル + OpenJSONFile）
 ├── jq_service.go          # gojqによるクエリ実行・エラー整形・使用キー抽出(AST解析)
-├── schema.go              # JSON値からキーツリー（型付き）を推論
+├── schema.go              # JSON値からキーツリー（型付き）とJSON Schemaを推論
 ├── saved_service.go       # 保存項目のCRUD（~/.shiboq/saved/*.json）+ 旧history/からの移行
 ├── jq_service_test.go     # jq_service.goのテスト（テストケースごとに個別のfunc、テーブル駆動ではない）
 ├── schema_test.go         # schema.goのテスト（同上）
@@ -129,8 +129,8 @@ shiboq/
 │   │   ├── jqCompletions.js    # jqクエリペイン用のMonaco補完プロバイダ
 │   │   ├── App.svelte          # ルート（状態管理 + 5ペインのレイアウト + 自動実行パイプライン。後述「App.svelteの並行処理」）
 │   │   ├── SavedPane.svelte    # 左ペイン：保存項目一覧（＋保存ボタン・各行の削除ボタン）
-│   │   ├── JsonPane.svelte     # 中央上ペイン：元のJSON（編集可、Monaco）
-│   │   ├── SchemaPane.svelte   # 中央下ペイン：キーツリー（使用中キーをハイライト）
+│   │   ├── JsonPane.svelte     # 中央上ペイン：元のJSON（編集可、Monaco。「整形」ボタン）
+│   │   ├── SchemaPane.svelte   # 中央下ペイン：キーツリー（使用中キーをハイライト。JSON Schemaの「コピー」ボタン）
 │   │   ├── SchemaTreeNode.svelte # スキーマツリーの再帰描画コンポーネント
 │   │   ├── QueryPane.svelte    # 右上ペイン：jqクエリ入力（Monaco + 補完）
 │   │   └── ResultPane.svelte   # 右下ペイン：実行結果（読み取り専用Monaco）
@@ -154,6 +154,7 @@ shiboq/
 | `RunQuery(jsonText, query, raw)` | jqクエリを実行し `{result, error, errorKind}` を返す。エラー時は `error` に日本語メッセージ、`result` は空文字。複数出力（`.a, .b`等）は改行区切りで連結する。`raw` は jq の `-r` 相当で、true のとき結果が**文字列の場合に限り**引用符とエスケープを外す（文字列以外は raw によらずJSON表現のまま）。詳細は下記「RunQueryの実行制限とエラー種別」参照 |
 | `ExtractUsedKeys(query)` | クエリのASTを解析し、参照されているキー名一覧を返す（重複排除、順不同）。ドット記法（`.foo`）に加え、文字列補間（`"\(.name)"`）・単項演算子（`-.foo`）・分解パターン（`. as {a: $x}` や `reduce ... as {id: $i}`）内のキー参照も対象。`.["foo"]` のようなブラケット記法によるキー参照のみ対象外（既知の制約） |
 | `InferSchema(jsonText)` | JSONからキーツリー（型付き）を推論する（`schema.go`のInferSchemaを呼ぶだけ） |
+| `SchemaJSON(jsonText)` | JSONから推論したスキーマを、整形済み（2スペース）のJSON Schema文字列で返す（`schema.go`のInferJSONSchemaを呼ぶだけ）。スキーマペインの「コピー」用。詳細は下記「JSON Schemaの推論ルール」参照 |
 
 #### RunQueryの実行制限とエラー種別
 
@@ -181,6 +182,20 @@ shiboq/
 `nan`/`infinite`のようなjqの組み込み関数が返すfloat64のNaN/±Infは
 `encoding/json`がMarshalできないため、`normalizeNonFiniteFloats`で
 再帰的に`null`へ正規化してから整形する（本物のjqの`nan`表示に合わせている）。
+
+#### JSON Schemaの推論ルール（InferJSONSchema）
+
+スキーマペイン（`InferSchema`）と表示が食い違わないよう、推論ルールを揃えている。
+
+- 出力するのは`type` / `properties` / `items`のみ。`required`・`$schema`・
+  `additionalProperties`等は推論しない（1件のサンプルからは判断できないため）
+- 配列は先頭要素を`items`にする。空配列は`{"type": "array"}`のみ（`items`無し）
+- 数値は全て`number`（`integer`と区別しない）
+- `type`を先頭に出し、`properties`のキーはアルファベット順
+- キー名をHTMLエスケープしない（`<`を`\u003c`にしない）
+- `SchemaNode`のツリーからではなく**元のJSONから直接**生成する。`SchemaNode`は
+  「ルートが配列かどうか」を保持しておらず（先頭要素の形状をルート扱いにする）、
+  そこから作るとルート配列が`object`になってしまうため
 
 ### SavedService（saved_service.go）
 
@@ -282,6 +297,21 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 `window`リスナーが残留しないようにする。幅は`SAVED_MIN_WIDTH`(160)〜
 `SAVED_MAX_WIDTH`(500)にクランプする。中央/右列の上下比率（JSON/スキーマ、
 クエリ/結果）は引き続き固定（`flex: 1`で等分、リサイズ不可）。
+
+### JSONの整形とスキーマのコピー
+
+- **整形**（JSONペインのヘッダー「整形」ボタン）: Monaco標準の
+  `editor.action.formatDocument`（JSON言語サービスのフォーマッタ）を呼ぶ。
+  `JSON.parse`→`JSON.stringify`にはしない。大きな整数の精度落ちや数値表記の変化
+  （`1.0`→`1`）が起き、Ctrl+Zで戻せなくなるため。Monacoは読み込んだ内容から
+  インデント幅を自動検出するので、実行前にモデルを`tabSize: 2`に固定している。
+  整形は通常の編集として扱われ、500ms後に自動再実行される。
+- **スキーマのコピー**（スキーマペインのヘッダー「コピー」ボタン）:
+  `SchemaJSON(jsonText)`の結果をWailsランタイムの`ClipboardSetText`で書き込む
+  （`navigator.clipboard`はWebKitGTK等のWebViewで許可されないことがあるため使わない）。
+  デバウンス後の`schemaNodes`ではなく**押した時点の`jsonText`**から作る。
+  結果はトーストで通知する（「スキーマをコピーしました」／「コピーできませんでした」）。
+  JSONが不正な間（`schemaError`あり）はボタンを無効化する。
 
 ### 保存・削除の失敗通知
 

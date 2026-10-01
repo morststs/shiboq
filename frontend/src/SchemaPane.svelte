@@ -1,11 +1,22 @@
 <script>
   import SchemaTreeNode from './SchemaTreeNode.svelte';
+  import { Button } from 'flowbite-svelte';
 
-  let { nodes = [], usedKeys = new Set(), errorMessage = '' } = $props();
+  let { nodes = [], usedKeys = new Set(), errorMessage = '', onCopy } = $props();
 </script>
 
 <div class="pane">
-  <div class="pane-header">スキーマ</div>
+  <div class="pane-header">
+    <span>スキーマ</span>
+    <!-- JSONが不正な間はスキーマを作れないので無効化する。 -->
+    <Button
+      size="xs"
+      color="alternative"
+      disabled={!!errorMessage}
+      title="スキーマをJSON Schema形式でクリップボードにコピーします"
+      onclick={() => onCopy?.()}
+    >コピー</Button>
+  </div>
   <div class="tree">
     {#if errorMessage}
       <div class="error-text">{errorMessage}</div>
@@ -30,6 +41,9 @@
     background: #1e1e1e;
   }
   .pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 6px 10px;
     background: #252526;
     border-bottom: 1px solid #3c3c3c;

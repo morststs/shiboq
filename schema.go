@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // SchemaNode はJSON値から推論したキーとその型を表すノード。
@@ -70,5 +72,64 @@ func typeOf(value any) string {
 		return "array<" + typeOf(v[0]) + ">"
 	default:
 		return "unknown"
+	}
+}
+
+// jsonSchemaNode は InferJSONSchema が出力するJSON Schemaの1ノード。
+// フィールドの宣言順がそのまま出力順になる（type を先頭にする）。
+// Properties は map なので encoding/json がキーをアルファベット順に並べる。
+// omitzero は nil のときだけ省略する（omitempty と違い、空オブジェクト `{}` の
+// `"properties": {}` は残る）。
+type jsonSchemaNode struct {
+	Type       string                     `json:"type"`
+	Properties map[string]*jsonSchemaNode `json:"properties,omitzero"`
+	Items      *jsonSchemaNode            `json:"items,omitzero"`
+}
+
+// InferJSONSchema はJSONテキストから、整形済みのJSON Schema文字列を推論する。
+// 推論ルールは InferSchema（スキーマペイン）と揃えている: 配列は先頭要素を
+// 要素の代表とし（空配列は items を出力しない）、数値は全て number とする。
+// 出力するのは type / properties / items のみで、required 等は推論しない。
+// SchemaNode のツリーからではなく元のJSONから直接作るのは、SchemaNode が
+// 「ルートが配列かどうか」を保持していないため。
+func InferJSONSchema(jsonText string) (string, error) {
+	var value any
+	if err := json.Unmarshal([]byte(jsonText), &value); err != nil {
+		return "", fmt.Errorf("JSONの解析に失敗しました: %w", err)
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	// 既定のHTMLエスケープ（< → < 等）はキー名を読みにくくするだけなので切る。
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(inferJSONSchemaNode(value)); err != nil {
+		return "", fmt.Errorf("スキーマの生成に失敗しました: %w", err)
+	}
+	// Encoder は末尾に改行を付けるので落とす。
+	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+func inferJSONSchemaNode(value any) *jsonSchemaNode {
+	switch v := value.(type) {
+	case map[string]any:
+		props := make(map[string]*jsonSchemaNode, len(v))
+		for k, child := range v {
+			props[k] = inferJSONSchemaNode(child)
+		}
+		return &jsonSchemaNode{Type: "object", Properties: props}
+	case []any:
+		node := &jsonSchemaNode{Type: "array"}
+		if len(v) > 0 {
+			node.Items = inferJSONSchemaNode(v[0])
+		}
+		return node
+	case nil:
+		return &jsonSchemaNode{Type: "null"}
+	case bool:
+		return &jsonSchemaNode{Type: "boolean"}
+	case float64:
+		return &jsonSchemaNode{Type: "number"}
+	default:
+		return &jsonSchemaNode{Type: "string"}
 	}
 }

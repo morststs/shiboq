@@ -196,6 +196,12 @@ func (s *JqService) InferSchema(jsonText string) ([]SchemaNode, error) {
 	return InferSchema(jsonText)
 }
 
+// SchemaJSON はJSONから推論したスキーマを、整形済みのJSON Schema文字列で返す
+// （schema.goのInferJSONSchema参照）。スキーマペインの「コピー」用。
+func (s *JqService) SchemaJSON(jsonText string) (string, error) {
+	return InferJSONSchema(jsonText)
+}
+
 // ExtractUsedKeys はjqクエリのAST（抽象構文木）を解析し、
 // `.foo` のようなドットによるフィールドアクセスで参照されているキー名の
 // 一覧を返す（重複排除、順不同）。`.["foo"]` のようなブラケット記法は対象外。
