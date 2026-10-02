@@ -112,6 +112,9 @@ shiboq/
 │                          #   チェックのロジックだけreadJSONFileWithLimitへ切り出してテストする
 ├── Dockerfile              # 開発用コンテナイメージ定義（golang:1.24-bookworm）
 ├── scripts/dev-run.sh      # コンテナ内でコマンドを実行するヘルパー
+├── scripts/build-msix.ps1  # Microsoft Store提出用MSIXのビルド（Windows専用。後述「MSIX（Microsoft Store提出用）」）
+├── build/msix/AppxManifest.xml # MSIXのマニフェスト（Partner Centerの製品IDを書き込む）
+├── PRIVACY.md              # プライバシーポリシー（Store提出時にURLを入力する）
 ├── .devcache/               # go/npmキャッシュのバインドマウント先（.gitignore済み、初回実行時に自動生成）
 ├── docs/superpowers/
 │   ├── specs/2026-08-02-jqrepl-design.md    # 設計仕様書（アプリソースではない。
@@ -334,6 +337,33 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 削除は各行のホバーで現れる×から確認ダイアログを経て実行する。削除したのが
 選択中の項目なら`selectedSavedId`を`null`に戻す（存在しないIDを指したままにしない）。
 両ダイアログとも`Esc`で閉じられる。
+
+## MSIX（Microsoft Store提出用）
+
+署名の無い`shiboq.exe`はWindows 11のスマート アプリ コントロールにブロックされる
+（アプリ単位の例外登録はできない）。Store経由ならMicrosoftが署名するため、
+有料のコード署名証明書なしで回避できる。そのための仕組み。
+
+- **`build/msix/AppxManifest.xml`**: `runFullTrust`のデスクトップアプリ構成。
+  `Identity`の`Name`・`Publisher`と`PublisherDisplayName`はPartner Centerの
+  「製品 ID の表示」の値（設定済み。秘密情報ではない）で、完全に一致しないと
+  Storeに受け付けられない。`REPLACE_WITH_`で始まる仮の値だとスクリプトがエラーで止まる。
+  `MinVersion`はWindows 11（`10.0.22000.0`）。WebView2が標準搭載の環境に絞るため。
+- **`scripts/build-msix.ps1 -Version X.Y.Z`**: `build/bin/shiboq.exe`・マニフェスト・
+  ロゴ・ライセンス類を`build/msix/staging`に集め、Windows SDKの`MakeAppx.exe`で
+  `build/bin/shiboq.msix`を作る。**Windows専用**で、開発用コンテナ（Linux）では
+  実行できない。ロゴ（44px・150px・50px）は`build/appicon.png`からその場で
+  縮小生成する（画像をリポジトリに重複して持たない）。**署名はしない**（Storeが
+  審査後に署名する）。
+- **バージョン**: `X.Y.Z` → `X.Y.Z.0`に変換する。Storeの規則で4桁目は0固定、
+  **先頭は0にできない**。exeのタグは`v0.x.y`なので、MSIXのバージョンはタグとは
+  別に`1.0.0`以上を指定する。
+- **スクリプトはASCIIのみ**で書く。Windows PowerShell 5.1はBOM無しのスクリプトを
+  ANSIとして読むため、日本語を入れると構文解析が壊れ得る。
+- **`.github/workflows/msix.yml`**: 手動実行（`workflow_dispatch`）専用。成果物は
+  Releaseではなく実行のArtifact（`shiboq-msix`）に出す。`release.yml`とは独立。
+- ロゴは修飾子無しのファイル名のみ（`targetsize-*`・`scale-*`の派生は持たない）。
+  派生を使うには`resources.pri`（MakePri）が必要になるため、今は入れていない。
 
 ## 既知の制約（スコープ外）
 

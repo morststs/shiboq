@@ -84,6 +84,32 @@ Windows で実行するには WebView2 ランタイムが必要です（Windows 
 exe をビルドし、`shiboq-windows-amd64.zip`（exe 本体・LICENSE・
 THIRD_PARTY_LICENSES.md・README.md を同梱）を Release に自動添付します。
 
+## Microsoft Store 向けパッケージ（MSIX）
+
+署名の無い exe は Windows 11 のスマート アプリ コントロールにブロックされることがあります。
+Microsoft Store 経由で配布すると Store が署名するため、証明書を用意せずに回避できます。
+
+1. [`build/msix/AppxManifest.xml`](./build/msix/AppxManifest.xml) の
+   `Identity`（`Name`・`Publisher`）と `PublisherDisplayName` が、Partner Center の
+   「製品 ID の表示」の値と一致していることを確認する（設定済み。秘密情報ではありません）。
+2. GitHub の Actions タブで「Build MSIX for Microsoft Store」を手動実行し、
+   バージョン（例: `1.0.0`）を入力する。Store の規則で先頭を `0` にはできないため、
+   exe のタグ（`v0.x.y`）とは別の番号になります。
+3. 実行結果の Artifact `shiboq-msix` から `shiboq.msix` をダウンロードし、
+   Partner Center の提出画面にアップロードする。
+
+MSIX は未署名のまま作ります（Store が審査後に署名します）。そのため、ダウンロードした
+`shiboq.msix` をそのままダブルクリックしてもインストールできません。
+
+Windows SDK を入れた Windows 上では、手元でも作れます。
+
+```powershell
+wails build -platform windows/amd64
+pwsh scripts/build-msix.ps1 -Version 1.0.0   # 出力: build/bin/shiboq.msix
+```
+
+プライバシーポリシーは [`PRIVACY.md`](./PRIVACY.md) を参照してください。
+
 ## ライセンス
 
 MIT License（[`LICENSE`](./LICENSE)）。

@@ -1,0 +1,61 @@
+name: Build MSIX for Microsoft Store
+
+# Microsoft Store 提出用の MSIX を作る。手動実行専用。
+# 成果物は Release には添付せず、この実行の Artifact としてダウンロードして
+# Partner Center に手でアップロードする（Store が審査後に署名するため、未署名のまま）。
+# release.yml（exe の zip を Release に添付）とは独立しており、Release を作らずに試せる。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'MSIX のバージョン（例: 1.0.0）。Store の規則で先頭を 0 にできない'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-msix:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build Windows binary
+        shell: bash
+        run: wails build -platform windows/amd64
+
+      # frontend/dist は上の build で生成されるので、テストはその後に実行する。
+      - name: Run tests
+        shell: bash
+        run: go test ./...
+
+      # 入力値は env 経由で渡す（run: に直接展開するとスクリプトとして解釈され得るため）。
+      - name: Build MSIX
+        shell: pwsh
+        env:
+          MSIX_VERSION: ${{ github.event.inputs.version }}
+        run: ./scripts/build-msix.ps1 -Version $env:MSIX_VERSION
+
+      - name: Upload MSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: shiboq-msix
+          path: build/bin/shiboq.msix
+          if-no-files-found: error

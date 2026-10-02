@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Microsoft Store 提出用 MSIX のマニフェスト。scripts/build-msix.ps1 が読み込み、
+  Identity の Version を差し込んでからパッケージ化する（このファイルの Version は仮の値）。
+
+  次の3つの値は、Partner Center の「製品 ID の表示」に出る値と完全に一致させること
+  （一致しないと Store がパッケージを受け付けない）。秘密情報ではないのでコミットしてよい。
+  値が REPLACE_WITH_ で始まる仮の値のままだと、スクリプトはエラーで止まる。
+    - Identity の Name          … Package/Identity/Name
+    - Identity の Publisher     … Package/Identity/Publisher（CN=... の形式）
+    - PublisherDisplayName      … Package/Properties/PublisherDisplayName
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="morststs.shiboq"
+    Publisher="CN=CE782894-A6A6-48CC-8F6D-36D71DA87B9A"
+    Version="1.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>shiboq</DisplayName>
+    <PublisherDisplayName>morststs</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!-- MinVersion は Windows 11（10.0.22000）。WebView2 ランタイムが標準搭載なので、
+         ランタイム未導入で起動できない環境を対象から外せる。 -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="ja-JP" />
+  </Resources>
+
+  <Applications>
+    <Application Id="shiboq" Executable="shiboq.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="shiboq"
+        Description="jq クエリを繰り返し実行して結果を確認できるデスクトップアプリ"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- 通常のデスクトップアプリ（Win32）として動かすために必要。 -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
