@@ -54,7 +54,7 @@ docker build -t shiboq-dev .
 # Goのテスト実行
 ./scripts/dev-run.sh go test -v ./...
 
-# Wailsビルド（Linux。出力: build/bin/shiboq）
+# Wailsビルド（Linux。出力: build/bin/shiboq。WebKitGTK 4.1にリンクする。後述の注記）
 ./scripts/dev-run.sh wails build
 
 # Wailsビルド（Windows。出力: build/bin/shiboq.exe）
@@ -88,7 +88,15 @@ docker build -t shiboq-dev .
 
 - `golang:1.24-bookworm` ベース、Node.js 22 LTS（NodeSource）、Wails CLI v2.12.0
   （`go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0` でgo.modと明示的に揃えている）
-- libgtk-3-dev, libwebkit2gtk-4.0-dev/4.1-dev（Linuxビルド用）
+- libgtk-3-dev, libwebkit2gtk-4.0-dev/4.1-dev（Linuxビルド用）。実際に使うのは4.1で、
+  `wails.json`の`"build:tags": "webkit2_41"`で指定している（Wailsはこのタグと
+  CLIの`-tags`を合算する）。Wails v2の既定はWebKitGTK 4.0だが、Ubuntu 24.04以降は
+  `libwebkit2gtk-4.0`を提供しておらず、既定のままだと
+  `error while loading shared libraries: libwebkit2gtk-4.0.so.37`で起動できないため。
+  4.1はUbuntu 22.04にもあるので、4.1に寄せて失う対象は無い。実行時に必要なのは
+  `libwebkit2gtk-4.1-0`（Ubuntu 26.04の`2.52.6-0ubuntu0.26.04.1`で起動確認済み）。
+  `go test`/`go vet`はこのタグを使わず4.0側でリンクするが、コンテナには両方の
+  `-dev`があるので問題ない
 - gcc-mingw-w64-x86-64, nsis（Windowsクロスコンパイル用。
   `wails build -platform windows/amd64` で `build/bin/shiboq.exe` を生成できる。
   生成物はWindows x86-64のGUIサブシステム実行ファイル。
@@ -115,6 +123,7 @@ shiboq/
 ├── scripts/build-msix.ps1  # Microsoft Store提出用MSIXのビルド（Windows専用。後述「MSIX（Microsoft Store提出用）」）
 ├── build/msix/AppxManifest.xml # MSIXのマニフェスト（Partner Centerの製品IDを書き込む）
 ├── PRIVACY.md              # プライバシーポリシー（Store提出時にURLを入力する）
+├── docs/store-submission.md # Partner Centerに入力した内容の控え（説明文・審査メモ・画像の作り方等）
 ├── .devcache/               # go/npmキャッシュのバインドマウント先（.gitignore済み、初回実行時に自動生成）
 ├── docs/superpowers/
 │   ├── specs/2026-08-02-jqrepl-design.md    # 設計仕様書（アプリソースではない。
@@ -364,6 +373,64 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
   Releaseではなく実行のArtifact（`shiboq-msix`）に出す。`release.yml`とは独立。
 - ロゴは修飾子無しのファイル名のみ（`targetsize-*`・`scale-*`の派生は持たない）。
   派生を使うには`resources.pri`（MakePri）が必要になるため、今は入れていない。
+
+## Microsoft Storeへの提出（Partner Center）
+
+### 状況（2026-10-03時点）
+
+- 製品「shiboq」（Store ID `9MV10MVFX78Z`）は**下書き段階で、まだ「送信して認定を受ける」を押していない**。
+- 完了済み: パッケージ（`shiboq.msix` v1.0.0.0をアップロード、Validated）、プロパティ、
+  Store登録情報（日本語のみ）、申請オプション（runFullTrustの理由）、価格（無料、保存済み）。
+- **残り**: 年齢区分（IARCがアンケートを改訂したため回答し直し。MSIX製品を作り直した際に
+  回答が引き継がれず「アプリの種類」から未選択だった）。「追加のテスト情報」の説明欄が
+  保存されたかも要確認（最後に見た時点では空だった）。全項目が「完了」になったら送信する。
+- 入力した値・文章はすべて[`docs/store-submission.md`](./docs/store-submission.md)に控えてある。
+  再提出や作り直しのときはそこから転記する。
+
+### 提出で分かった注意点
+
+- **製品の種類は必ず「MSIX または PWA アプリ」**。最初に誤って「EXE または MSI アプリ」で
+  作ってしまった。EXE/MSI型はインストーラーのURLを登録する方式で、署名は自分で行う前提
+  （Storeは署名しない）ため、スマート アプリ コントロール回避という目的を果たせない。
+  種類は作成後に変更できないので、作り直して名前を移した。
+- **更新を出すときはMSIXのバージョンを上げる**（`1.0.0`の次は`1.0.1`以上）。
+  `.github/workflows/msix.yml`を`gh workflow run msix.yml -f version=X.Y.Z`で実行し、
+  Artifact `shiboq-msix`をダウンロードしてアップロードする。Chromeはzip内の未署名
+  実行ファイルを理由にダウンロードをブロックすることがあり、`Ctrl+J`から「保存」で通せる
+  （`gh run download <run-id> -n shiboq-msix`でも取得できる）。
+- Partner Centerの入力欄の制約: runFullTrustの理由は**500文字まで**。キーワードは
+  単独の`jq`・`JSON`を受け付けなかった（`jq クエリ`等の組み合わせで代替）。
+- 個人アカウントでは電話番号・住所は公開されないが、プロパティの「Support info」に
+  入れたものはStoreページに**公開される**ので、電話番号・住所は空欄にしている。
+- Partner Centerの「問題が発生しました…関連付け ID」は原因を示さない汎用エラー。
+  時間を置く・再読み込み・別ブラウザーで再試行する。
+
+## 実機での動作確認（Windows / WSL）
+
+開発用コンテナではGUIを確認できないので、ユーザーの実機で確認する。注意点:
+
+- **Windows 11のスマート アプリ コントロールが未署名の`shiboq.exe`をブロックする**
+  （ユーザーのPCで発生。以前は動いていたので、評価モードからオンに切り替わったと推測）。
+  アプリ単位の例外は無く、自己署名も通らない。解決策はStore経由の配布（Microsoftが署名）。
+- **Windowsサンドボックスでの確認手順**（スマート アプリ コントロールの影響を受けない）:
+  サンドボックスにはWebView2が無く、Wailsの「Missing Requirements」が出る。自動インストールは
+  失敗し、インストーラー画面も文字化けした（日本語フォントはサンドボックスに入っているので
+  フォントが原因ではない。原因不明）。次の手順で動いた:
+  1. Evergreen Standalone Installer（x64）を管理者PowerShellで`/silent /install`付きで実行
+  2. Wailsの判定は`HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\ClientState\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`
+     の`EBWebView`（インストール先フォルダー）と、その下の`EBWebView\x64\EmbeddedBrowserWebView.dll`の
+     実在で行う（go-webview2の`find_dll_installed.go`）。`Clients\{…}`の`pv`ではない。サンドボックスでは
+     この登録が実在するフォルダーとずれていたので、`EBWebView`を
+     `C:\Program Files (x86)\Microsoft\EdgeWebView\Application\<実在するバージョン>`に書き換えて起動した
+     （サンドボックス内だけの応急処置。通常のWindowsでは行わない）
+- **WSL（Ubuntu 26.04）でLinux版を動かす場合**: `libwebkit2gtk-4.1-0`に加えて`fonts-noto-cjk`が
+  必要（無いと日本語が□になる。フォントは同梱しない方針）。WSLgでスクリーンショットを
+  撮るには`GDK_BACKEND=x11 ./shiboq`で起動してImageMagickの`import`を使う。ただし
+  `GDK_BACKEND=x11`だとWindowsからのクリップボード貼り付けが不安定だった
+  （JSONは「ファイルを開く」で読み込めば回避できる）。
+- コンテナ内での起動確認は、`ubuntu:26.04`イメージに`libwebkit2gtk-4.1-0 xvfb`を入れて
+  `Xvfb :99 & DISPLAY=:99 ./build/bin/shiboq`で行える（`imagemagick`の`import -window root`で
+  画面を撮って描画まで確認できる。日本語を見るなら`fonts-noto-cjk`も入れる）。
 
 ## 既知の制約（スコープ外）
 

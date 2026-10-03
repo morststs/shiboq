@@ -75,6 +75,13 @@ docker build -t shiboq-dev .
 
 Windows で実行するには WebView2 ランタイムが必要です（Windows 11 は標準搭載）。
 
+Linux 版は WebKitGTK 4.1 を使います（`wails.json` の `build:tags` で `webkit2_41`
+を指定）。Ubuntu 22.04 以降なら次のパッケージで動きます（Ubuntu 26.04 で起動を確認済み）。
+
+```bash
+sudo apt install libwebkit2gtk-4.1-0 fonts-noto-cjk
+```
+
 ## ダウンロード（Windows）
 
 ビルド済みの Windows 向け実行ファイルは
