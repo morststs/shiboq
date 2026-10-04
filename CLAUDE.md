@@ -16,6 +16,10 @@ JSON/クエリの編集後500ms（デバウンス）でスキーマ再推論・�
 残ってしまい、一覧が意図しない項目で埋まっていた。そのため明示的な保存に変更した
 （旧`~/.shiboq/history/`は起動時に`saved/`へ自動移行する。後述`migrateLegacyHistoryDir`）。
 
+同じフロントエンドをブラウザで動かす**Web版**もあり、GitHub Pages
+（<https://morststs.github.io/shiboq/>）で公開している。jqエンジンはGoのコードを
+WebAssemblyにビルドしたもの（後述「Web版（GitHub Pages）」参照）。
+
 参考プロジェクト: [morststs/sirusita](https://github.com/morststs/sirusita)（Wails v2 + Svelte 5 + Monaco構成のメモアプリ）。
 技術スタック・開発環境・永続化パターンを踏襲している。
 
@@ -64,6 +68,9 @@ docker build -t shiboq-dev .
 # フロントエンドのみビルド確認
 ./scripts/dev-run.sh sh -c "cd frontend && npm run build"
 
+# Web版のビルド（出力: frontend/dist-web。wasmのビルドも含む）
+./scripts/dev-run.sh sh -c "cd frontend && npm run build:web"
+
 # Wailsバインディング再生成（Go側のメソッドシグネチャ変更時）
 ./scripts/dev-run.sh wails generate module
 ```
@@ -106,11 +113,14 @@ docker build -t shiboq-dev .
 
 ```
 shiboq/
-├── main.go                # Wails エントリポイント、App/JqService/SavedServiceのBind + 旧履歴ディレクトリの移行
+├── main.go                # Wails エントリポイント（//go:build !js。下記のapp.go等も同様）、App/JqService/SavedServiceのBind + 旧履歴ディレクトリの移行
 ├── app.go                 # App構造体（ライフサイクル + OpenJSONFile）
 ├── jq_service.go          # gojqによるクエリ実行・エラー整形・使用キー抽出(AST解析)
 ├── schema.go              # JSON値からキーツリー（型付き）とJSON Schemaを推論
 ├── saved_service.go       # 保存項目のCRUD（~/.shiboq/saved/*.json）+ 旧history/からの移行
+├── wasm_main.go           # Web版のエントリポイント（//go:build js && wasm）。shiboqCallをJSへ公開
+├── web_bridge.go          # Web版の呼び出しをJqServiceへ振り分ける（syscall/js非依存でテスト可能）
+├── web_bridge_test.go     # web_bridge.goのテスト
 ├── jq_service_test.go     # jq_service.goのテスト（テストケースごとに個別のfunc、テーブル駆動ではない）
 ├── schema_test.go         # schema.goのテスト（同上）
 ├── saved_service_test.go  # saved_service.goのテスト（同上）
@@ -120,6 +130,8 @@ shiboq/
 │                          #   チェックのロジックだけreadJSONFileWithLimitへ切り出してテストする
 ├── Dockerfile              # 開発用コンテナイメージ定義（golang:1.24-bookworm）
 ├── scripts/dev-run.sh      # コンテナ内でコマンドを実行するヘルパー
+├── scripts/build-wasm.sh   # Web版のwasm + wasm_exec.jsをfrontend/src/backend/generated/へ出力
+├── .github/workflows/pages.yml # mainへのpushでWeb版をGitHub Pagesへ公開
 ├── scripts/build-msix.ps1  # Microsoft Store提出用MSIXのビルド（Windows専用。後述「MSIX（Microsoft Store提出用）」）
 ├── build/msix/AppxManifest.xml # MSIXのマニフェスト（Partner Centerの製品IDを書き込む）
 ├── PRIVACY.md              # プライバシーポリシー（Store提出時にURLを入力する）
@@ -133,9 +145,16 @@ shiboq/
 │   └── plans/2026-08-02-jqrepl-implementation.md # 実装計画書（アプリソースではない、同上）
 ├── frontend/
 │   ├── svelte.config.js    # vitePreprocess({ script: true })（flowbite-svelte対応、削除不可）
-│   ├── vite.config.js      # Vite + svelte + @tailwindcss/vite
+│   ├── vite.config.js      # Vite + svelte + @tailwindcss/vite。`--mode web`でWeb版（'$backend'の切替）
+│   ├── public/favicon.png  # build/appicon.pngを64pxに縮小したもの
 │   ├── src/
 │   │   ├── main.js             # Svelte マウント
+│   │   ├── backend/            # バックエンド呼び出しの実装（App.svelteは'$backend'からimport）
+│   │   │   ├── wails.js        #   デスクトップ版: wailsjsのバインディングを再exportするだけ
+│   │   │   ├── web.js          #   Web版: wasm Worker・ファイル選択・navigator.clipboard
+│   │   │   ├── webSaved.js     #   Web版の保存項目（IndexedDB）
+│   │   │   ├── jq.worker.js    #   Web版: wasmを動かすWorker
+│   │   │   └── generated/      #   scripts/build-wasm.shの出力（.gitignore済み）
 │   │   ├── style.css           # グローバルスタイル（Tailwind + Flowbite）
 │   │   ├── monaco.js           # Monaco Editorの構成 + 'jq'言語ID登録（後述「Monaco構成の注意点」）
 │   │   ├── jqCompletions.js    # jqクエリペイン用のMonaco補完プロバイダ
@@ -347,6 +366,39 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 選択中の項目なら`selectedSavedId`を`null`に戻す（存在しないIDを指したままにしない）。
 両ダイアログとも`Esc`で閉じられる。
 
+## Web版（GitHub Pages）
+
+デスクトップ版と同じ`App.svelte`をブラウザで動かす。`vite.config.js`の`'$backend'`
+エイリアスが、通常は`src/backend/wails.js`、`--mode web`では`src/backend/web.js`を指す。
+両者は同じ名前・同じ形の関数（`RunQuery`等。エラーはrejectする）を提供するので、
+App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go:embed`される
+`frontend/dist`を上書きしないため）、`base: './'`（Pagesは`/shiboq/`配下で配信）。
+
+- **jqエンジン:** ルートパッケージを`GOOS=js GOARCH=wasm`でビルドする（`main.go`・
+  `app.go`・`saved_service.go`とそのテストは`//go:build !js`で除外、代わりに
+  `wasm_main.go`がmainになる）。`jq_service.go`・`schema.go`はそのまま共用。
+  `wasm_exec.js`はビルドしたGoの`$(go env GOROOT)/lib/wasm/`から必ずコピーする
+  （バージョンが合わないと動かない）。gzip後約1.6MB。
+- **Workerで動かし、メインスレッドで打ち切る:** wasmにはgoroutineのプリエンプションが
+  無く、`def f: f; f`のようにCPUを占有し続けるクエリでは**Go側の`Timeout`が発火しない**
+  （Nodeで実測）。そのため`web.js`がWorkerごと`terminate()`して打ち切り、
+  Go側と同じタイムアウト文言の`RunResult`を返す。さらに、前の`RunQuery`が未完了の
+  まま次の`RunQuery`が来たら、古い方をWorkerごと打ち切る（古い結果は`evaluateToken`で
+  捨てられるので待つ意味が無い）。巻き添えを避けるため、クエリ実行用と
+  スキーマ推論等の解析用でWorkerを分けている。コンパイル済みの`WebAssembly.Module`
+  はメインスレッドで1回だけ作り、Workerを作り直すたびに`postMessage`で渡す。
+- **保存項目:** IndexedDB（DB `shiboq`、ストア`saved`、keyPath `id`）。localStorageは
+  容量が約5MBしかなく、JSONを丸ごと保存すると溢れるため使わない。`saved_service.go`と
+  同じ規則（UUID発行・同一内容でも新規保存・新しい順・UUID以外は除外）。
+- **ファイルを開く:** `<input type="file">`。20MB上限と文言はデスクトップ版と同じ。
+- **クリップボード:** `navigator.clipboard.writeText`（Pagesはhttpsなので使える）。
+- **公開:** `.github/workflows/pages.yml`がmainへのpushごとにビルドして公開する。
+  リポジトリのPages設定はSourceが「GitHub Actions」。CIでは`go test`を実行しない
+  （Wailsのcgo依存と`frontend/dist`が必要なため）。`GOOS=js go vet`のみ。
+- **動作確認:** `shiboq-dev`イメージにrootで`chromium`を入れ、`playwright-core`
+  （`executablePath: '/usr/bin/chromium'`）で`vite preview --mode web`を操作して確認した
+  （結果表示・スキーマ・タイムアウト打ち切り・打ち切り後の復帰・保存とリロード後の復元）。
+
 ## MSIX（Microsoft Store提出用）
 
 署名の無い`shiboq.exe`はWindows 11のスマート アプリ コントロールにブロックされる
@@ -434,6 +486,7 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 
 ## 既知の制約（スコープ外）
 
+- Web版の保存項目はブラウザごとのIndexedDBで、デスクトップ版の`~/.shiboq/saved`とは共有されない
 - 複数JSONドキュメントのタブ管理は無い
 - jqクエリ（QueryPane）のシンタックスハイライトは無い（独自トークナイザ未実装、補完のみ）。
   結果ペイン（ResultPane）は検証無しの簡易Monarchトークナイザ（`'jq-result'`）を持つ

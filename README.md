@@ -1,6 +1,9 @@
 # shiboq
 
 jq クエリを繰り返し試しながら結果を確認するための、5ペイン構成のデスクトップアプリです。
+ブラウザで動く Web 版もあります。
+
+**Web 版: <https://morststs.github.io/shiboq/>**（インストール不要。JSON はブラウザ内で処理され、どこにも送信されません）
 
 JSON を貼り付けて jq クエリを書くと、入力が止まった 500ms 後に自動で実行され、
 結果とスキーマが並べて表示されます。試行錯誤しながら目的のクエリに
@@ -30,7 +33,20 @@ JSON を貼り付けて jq クエリを書くと、入力が止まった 500ms �
 - **jq バイナリ不要** — [gojq](https://github.com/itchyny/gojq) を組み込んでいるため、
   別途 jq をインストールする必要はありません。
 
-## データの保存場所
+## Web 版
+
+<https://morststs.github.io/shiboq/> で使えます。デスクトップ版と同じ画面・同じ jq エンジン
+（gojq を WebAssembly にビルドしたもの）で動き、JSON やクエリをサーバーへ送ることはありません。
+デスクトップ版との違いは次のとおりです。
+
+- 保存した項目はブラウザの IndexedDB に保存されます（ブラウザ・端末ごとに別。
+  サイトデータを消去すると消えます）。デスクトップ版の保存項目とは共有されません。
+- 初回表示時に jq エンジン（約 1.6MB、gzip 圧縮時）をダウンロードします。
+
+`main` ブランチに push すると GitHub Actions（[`pages.yml`](./.github/workflows/pages.yml)）が
+ビルドして GitHub Pages に公開します。
+
+## データの保存場所（デスクトップ版）
 
 保存した項目は次のディレクトリに 1 件 1 ファイルで保存されます。
 
@@ -67,6 +83,9 @@ docker build -t shiboq-dev .
 
 # テスト
 ./scripts/dev-run.sh go test ./...
+
+# Web 版のビルド（出力: frontend/dist-web）
+./scripts/dev-run.sh sh -c "cd frontend && npm run build:web"
 ```
 
 > clone 直後は `go test` が `pattern all:frontend/dist: no matching files found` で

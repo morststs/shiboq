@@ -1,3 +1,7 @@
+//go:build !js
+
+// Web版（GOOS=js）ではファイルシステム・Wailsランタイムを使えないため除外する（wasm_main.go参照）。
+
 package main
 
 import (

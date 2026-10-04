@@ -1,0 +1,76 @@
+name: Deploy Web to GitHub Pages
+
+# main への push でWeb版（Goをwasmにしたjqエンジン + Svelteのフロントエンド）を
+# ビルドし、GitHub Pages（https://morststs.github.io/shiboq/）へ公開する。
+# デスクトップ版のrelease.yml / msix.ymlとは独立している。
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 公開が重なったときは後から来たものを待たせる（実行中の公開は中断しない）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # go testはWails（GTK/WebKitのcgo）とfrontend/distを要求するためここでは
+      # 実行しない（release.ymlと開発用コンテナで実行する）。wasm向けのvetのみ行う。
+      - name: Vet wasm build
+        run: GOOS=js GOARCH=wasm go vet .
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build web
+        working-directory: frontend
+        run: npm run build:web
+
+      # MIT / BSD / Apache いずれも著作権表示の保持が再頒布条件なので、
+      # ライセンス表示物を公開物に同梱する。
+      - name: Add license files
+        run: cp LICENSE THIRD_PARTY_LICENSES.md PRIVACY.md frontend/dist-web/
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist-web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

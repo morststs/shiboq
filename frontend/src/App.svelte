@@ -5,10 +5,18 @@
   import QueryPane from './QueryPane.svelte';
   import ResultPane from './ResultPane.svelte';
   import { onMount, onDestroy } from 'svelte';
-  import { OpenJSONFile } from '../wailsjs/go/main/App';
-  import { RunQuery, ExtractUsedKeys, InferSchema, SchemaJSON } from '../wailsjs/go/main/JqService';
-  import { ClipboardSetText } from '../wailsjs/runtime/runtime';
-  import { SaveItem, ListSaved, DeleteSaved } from '../wailsjs/go/main/SavedService';
+  // デスクトップ版（Wails）とWeb版で実装を差し替える。vite.config.js参照。
+  import {
+    OpenJSONFile,
+    RunQuery,
+    ExtractUsedKeys,
+    InferSchema,
+    SchemaJSON,
+    ClipboardSetText,
+    SaveItem,
+    ListSaved,
+    DeleteSaved,
+  } from '$backend';
 
   const SAMPLE_JSON = '{\n  "name": "taro",\n  "age": 20,\n  "tags": ["admin", "user"],\n  "address": {\n    "city": "tokyo"\n  }\n}';
 
@@ -271,8 +279,9 @@
   // スキーマをJSON Schema形式でクリップボードへコピーする。
   // デバウンス後のschemaNodesではなく、押した時点のjsonTextから作る（編集直後に
   // 押しても、画面のJSONと食い違う古いスキーマをコピーしないため）。
-  // navigator.clipboardはWebView（特にWebKitGTK）で許可されないことがあるため、
-  // WailsランタイムのクリップボードAPIを使う。
+  // デスクトップ版はnavigator.clipboardがWebView（特にWebKitGTK）で許可されない
+  // ことがあるため、WailsランタイムのクリップボードAPIを使う（Web版は
+  // navigator.clipboard。backend/web.js参照）。
   async function copySchema() {
     try {
       const schema = await SchemaJSON(jsonText);

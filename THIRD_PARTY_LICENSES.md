@@ -1,7 +1,8 @@
 # サードパーティライセンス
 
 shiboq 本体は MIT ライセンス（[`LICENSE`](./LICENSE)）で配布されます。
-ビルド成果物（`build/bin/shiboq`, `build/bin/shiboq.exe`）には以下の
+ビルド成果物（`build/bin/shiboq`, `build/bin/shiboq.exe`、Web 版の
+`frontend/dist-web`）には以下の
 サードパーティソフトウェアが含まれます。いずれも許容的ライセンスであり、
 コピーレフト（GPL / AGPL / LGPL / SSPL）系のコードは含まれません。
 
@@ -21,6 +22,10 @@ LICENSE ファイルを参照してください。
 | [github.com/rivo/uniseg](https://github.com/rivo/uniseg) | v0.4.7 | MIT |
 | [github.com/google/uuid](https://github.com/google/uuid) | v1.6.0 | BSD-3-Clause |
 | [github.com/pkg/errors](https://github.com/pkg/errors) | v0.9.1 | BSD-2-Clause |
+| [Go](https://go.dev)（標準ライブラリ・ランタイム、Web 版の `wasm_exec.js`） | 1.24 | BSD-3-Clause |
+
+Web 版（WebAssembly）には Wails と、Wails 経由の依存（`leaanthony/*`・
+`go-ansi-parser`・`pkg/errors`）は含まれません。
 
 Windows 向けビルドでは、上記に加えて Wails が依存する
 `github.com/go-ole/go-ole`（MIT）、`git.sr.ht/~jackmordaunt/go-toast/v2`（MIT）等が
