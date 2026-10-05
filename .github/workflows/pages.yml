@@ -1,7 +1,7 @@
 name: Deploy Web to GitHub Pages
 
 # main への push でWeb版（Goをwasmにしたjqエンジン + Svelteのフロントエンド）を
-# ビルドし、GitHub Pages（https://morststs.github.io/shiboq/）へ公開する。
+# ビルドし、GitHub Pages（https://shiboq.e17.click/）へ公開する。
 # デスクトップ版のrelease.yml / msix.ymlとは独立している。
 on:
   push:

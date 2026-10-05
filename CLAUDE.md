@@ -17,7 +17,7 @@ JSON/クエリの編集後500ms（デバウンス）でスキーマ再推論・�
 （旧`~/.shiboq/history/`は起動時に`saved/`へ自動移行する。後述`migrateLegacyHistoryDir`）。
 
 同じフロントエンドをブラウザで動かす**Web版**もあり、GitHub Pages
-（<https://morststs.github.io/shiboq/>）で公開している。jqエンジンはGoのコードを
+（<https://shiboq.e17.click/>）で公開している。jqエンジンはGoのコードを
 WebAssemblyにビルドしたもの（後述「Web版（GitHub Pages）」参照）。
 
 参考プロジェクト: [morststs/sirusita](https://github.com/morststs/sirusita)（Wails v2 + Svelte 5 + Monaco構成のメモアプリ）。
@@ -372,7 +372,7 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 エイリアスが、通常は`src/backend/wails.js`、`--mode web`では`src/backend/web.js`を指す。
 両者は同じ名前・同じ形の関数（`RunQuery`等。エラーはrejectする）を提供するので、
 App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go:embed`される
-`frontend/dist`を上書きしないため）、`base: './'`（Pagesは`/shiboq/`配下で配信）。
+`frontend/dist`を上書きしないため）、`base: './'`（相対パスにしておけば、独自ドメインのルートでも`morststs.github.io/shiboq/`のようなサブパスでも動く）。
 
 - **jqエンジン:** ルートパッケージを`GOOS=js GOARCH=wasm`でビルドする（`main.go`・
   `app.go`・`saved_service.go`とそのテストは`//go:build !js`で除外、代わりに
@@ -393,7 +393,12 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
 - **ファイルを開く:** `<input type="file">`。20MB上限と文言はデスクトップ版と同じ。
 - **クリップボード:** `navigator.clipboard.writeText`（Pagesはhttpsなので使える）。
 - **公開:** `.github/workflows/pages.yml`がmainへのpushごとにビルドして公開する。
-  リポジトリのPages設定はSourceが「GitHub Actions」。CIでは`go test`を実行しない
+  リポジトリのPages設定はSourceが「GitHub Actions」。
+- **独自ドメイン:** `shiboq.e17.click`。Route53のホストゾーン`e17.click`に
+  `shiboq` → `morststs.github.io`のCNAME（TTL 300）を置き、Pages設定のカスタムドメインに
+  指定している（Actionsでの公開なので`CNAME`ファイルは不要。Pages設定側が正）。
+  `morststs.github.io/shiboq/`へのアクセスは独自ドメインへ転送される。
+  同ゾーンの`app`・`numvil`等も同じ構成。CIでは`go test`を実行しない
   （Wailsのcgo依存と`frontend/dist`が必要なため）。`GOOS=js go vet`のみ。
 - **動作確認:** `shiboq-dev`イメージにrootで`chromium`を入れ、`playwright-core`
   （`executablePath: '/usr/bin/chromium'`）で`vite preview --mode web`を操作して確認した

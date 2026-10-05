@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-Last updated / 最終更新日: 2026-10-04
+Last updated / 最終更新日: 2026-10-05
 
 ## English
 
@@ -30,11 +30,11 @@ On Windows, shiboq displays its user interface with the Microsoft Edge WebView2 
 
 ### Web version
 
-shiboq is also available as a web page at <https://morststs.github.io/shiboq/>.
+shiboq is also available as a web page at <https://shiboq.e17.click/>.
 
 - The JSON, queries, and results are processed entirely inside your browser (by a WebAssembly build of the same jq engine). They are never sent to any server.
 - Items you save and display preferences are stored in your browser's local storage (IndexedDB and localStorage) on your device only. You can delete them from within the app or by clearing the site data in your browser.
-- The page is hosted on GitHub Pages. When your browser downloads the page, GitHub receives the usual request information (such as your IP address) as part of serving it. The developer has no access to it, and it is governed by the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement). The page loads nothing from any other domain.
+- The page is hosted on GitHub Pages. When your browser downloads the page, GitHub receives the usual request information (such as your IP address) as part of serving it. The developer has no access to it, and it is governed by the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement). The domain name is resolved by Amazon Route 53 (DNS only; no page content passes through it). The page loads nothing from any other domain.
 
 ### Changes to this policy
 
@@ -74,11 +74,11 @@ Windowsでは、画面表示にWindowsのコンポーネントであるMicrosoft
 
 ### Web版
 
-shiboqは <https://morststs.github.io/shiboq/> でWebページとしても利用できます。
+shiboqは <https://shiboq.e17.click/> でWebページとしても利用できます。
 
 - JSON・クエリ・実行結果は、すべてブラウザ内で処理されます（同じjqエンジンをWebAssemblyにしたものを使用）。サーバーへ送信されることはありません。
 - 保存した項目と表示設定は、お使いの端末のブラウザ内（IndexedDBおよびlocalStorage）にのみ保存されます。アプリ内の削除操作、またはブラウザのサイトデータの消去により、いつでも消去できます。
-- ページはGitHub Pagesで配信しています。ブラウザがページを読み込む際、配信の過程でGitHubが通常のリクエスト情報（IPアドレスなど）を受け取ります。開発者はこれにアクセスできず、その取り扱いは[GitHub のプライバシーに関する声明](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement)に従います。GitHub以外のドメインからは何も読み込みません。
+- ページはGitHub Pagesで配信しています。ブラウザがページを読み込む際、配信の過程でGitHubが通常のリクエスト情報（IPアドレスなど）を受け取ります。開発者はこれにアクセスできず、その取り扱いは[GitHub のプライバシーに関する声明](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement)に従います。ドメイン名の解決（DNS）にはAmazon Route 53を使っていますが、ページの内容はそこを経由しません。GitHub以外からは何も読み込みません。
 
 ### 本ポリシーの変更
 
