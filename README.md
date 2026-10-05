@@ -103,16 +103,17 @@ sudo apt install libwebkit2gtk-4.1-0 fonts-noto-cjk
 
 ## ダウンロード（Windows）
 
-ビルド済みの Windows 向け実行ファイルは
-[Releases](https://github.com/morststs/shiboq/releases/latest) から入手できます。
+**[Microsoft Store](https://apps.microsoft.com/detail/9MV10MVFX78Z)** からインストールしてください
+（Microsoft が署名しているため、Windows 11 のスマート アプリ コントロールにブロックされません）。
 
+署名の無い exe 単体も [Releases](https://github.com/morststs/shiboq/releases/latest) に置いています
+（スマート アプリ コントロールがオンの環境では起動できないことがあります）。
 `v*` タグ（例: `v0.1.0`）を push すると GitHub Actions が `windows-latest` 上で
 exe をビルドし、`shiboq-windows-amd64.zip`（exe 本体・LICENSE・
 THIRD_PARTY_LICENSES.md・README.md を同梱）を Release に自動添付します。
+Store 版の更新はこれとは別に手動で行います（下記）。
 
 ## Microsoft Store 向けパッケージ（MSIX）
-
-Windows 版は Microsoft Store で公開しています: <https://apps.microsoft.com/detail/9MV10MVFX78Z>
 
 署名の無い exe は Windows 11 のスマート アプリ コントロールにブロックされることがあります。
 Microsoft Store 経由で配布すると Store が署名するため、証明書を用意せずに回避できます。

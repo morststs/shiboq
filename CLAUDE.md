@@ -468,6 +468,11 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
 - 入力した値・文章はすべて[`docs/store-submission.md`](./docs/store-submission.md)に控えてある。
   再提出や作り直しのときはそこから転記する。
 
+GitHubのRelease本文は、Store版（とWeb版）へのリンクを先頭に置く（release.ymlの`body`で
+毎回書き込む。v0.3.0は`gh release edit`で後から同じ文面にした）。exeのzipは、Storeを
+使えない人向けに引き続き添付している。リリースノート本体は従来どおり注釈付きタグの
+メッセージに書く（Release本文には入らない）。
+
 ### 更新の出し方（現状は手動）
 
 Storeは自動更新されない。GitHubのRelease（exe）・Web版とは別の経路で、毎回

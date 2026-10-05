@@ -70,3 +70,17 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: build/bin/shiboq-windows-amd64.zip
           fail_on_unmatched_files: true
+          # Windowsの利用者にはStore版を案内する。未署名のexeはWindows 11の
+          # スマート アプリ コントロールにブロックされ得るが、Store版はMicrosoftが署名している。
+          # Store版の更新は手動で別途出すため（CLAUDE.md「更新の出し方」）、
+          # Store側がこのリリースより古い版のことがある点も書いておく。
+          body: |
+            ## ダウンロード
+
+            **Windows: [Microsoft Store](https://apps.microsoft.com/detail/9MV10MVFX78Z)**（おすすめ。自動更新されます）
+
+            **ブラウザ: [Web版](https://shiboq.e17.click/)**（インストール不要）
+
+            下の `shiboq-windows-amd64.zip` は署名の無い exe です。Windows 11 のスマート アプリ コントロールに
+            ブロックされることがあるため、通常は Store 版を使ってください。
+            Store 版はこのリリースより少し遅れて更新されることがあります。
