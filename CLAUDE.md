@@ -393,16 +393,30 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
 - **ファイルを開く:** `<input type="file">`。20MB上限と文言はデスクトップ版と同じ。
 - **クリップボード:** `navigator.clipboard.writeText`（Pagesはhttpsなので使える）。
 - **公開:** `.github/workflows/pages.yml`がmainへのpushごとにビルドして公開する。
-  リポジトリのPages設定はSourceが「GitHub Actions」。
-- **独自ドメイン:** `shiboq.e17.click`。Route53のホストゾーン`e17.click`に
-  `shiboq` → `morststs.github.io`のCNAME（TTL 300）を置き、Pages設定のカスタムドメインに
-  指定している（Actionsでの公開なので`CNAME`ファイルは不要。Pages設定側が正）。
-  `morststs.github.io/shiboq/`へのアクセスは独自ドメインへ転送される。
-  同ゾーンの`app`・`numvil`等も同じ構成。CIでは`go test`を実行しない
+  リポジトリのPages設定はSourceが「GitHub Actions」。CIでは`go test`を実行しない
   （Wailsのcgo依存と`frontend/dist`が必要なため）。`GOOS=js go vet`のみ。
+  使用中のアクション（checkout@v4・setup-go@v5・setup-node@v4・configure-pages@v5・
+  upload-pages-artifact@v3・deploy-pages@v4）はNode 20対象で非推奨の警告が出る
+  （現状は動く。いずれ更新が必要）。deployジョブはGitHub側のランナー待ちで
+  10分以上`queued`のまま止まることがあった（こちらの問題ではなく、待てば進む）。
+- **独自ドメイン:** `shiboq.e17.click`（2026-10-05設定）。Route53のホストゾーン`e17.click`
+  （`Z003907937M42XWPZX222`）に`shiboq` → `morststs.github.io`のCNAME（TTL 300）を置き、
+  Pages設定のカスタムドメインに指定している（Actionsでの公開なので`CNAME`ファイルは
+  不要。Pages設定側が正。`gh api -X PUT repos/morststs/shiboq/pages -f cname=...`）。
+  証明書は発行済みでHTTPS強制。`morststs.github.io/shiboq/`は独自ドメインへ301で転送される。
+  リポジトリのWebsite欄もこのURL。同ゾーンの`app`・`numvil`等も同じ構成。
+  Route53はaws-mcp経由で操作する。`TOKEN_EXPIRED`が出たら、認証し直すだけでは足りず
+  `/mcp`でaws-mcpを再接続する必要があった。
 - **動作確認:** `shiboq-dev`イメージにrootで`chromium`を入れ、`playwright-core`
   （`executablePath: '/usr/bin/chromium'`）で`vite preview --mode web`を操作して確認した
   （結果表示・スキーマ・タイムアウト打ち切り・打ち切り後の復帰・保存とリロード後の復元）。
+  同じスクリプトで公開中の`morststs.github.io/shiboq/`も確認済み（独自ドメイン化の前）。
+  スクリプトは`.devcache/e2e/`（.gitignore済み、リポジトリには無い）。Monacoの
+  `innerText`には行番号が混ざる（`"1\n\"taro\""`）ので、比較時は注意。
+  **開発環境のネットワークは許可されたホスト名以外への接続を遮断する**ため、
+  `shiboq.e17.click`はここから名前解決も接続もできない（GitHubのIPを指定しても
+  SNIで切られる）。独自ドメインでの表示確認はユーザーのブラウザで行う
+  （2026-10-05時点で未確認）。
 
 ## MSIX（Microsoft Store提出用）
 
