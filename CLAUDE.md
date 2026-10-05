@@ -455,16 +455,34 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
 
 ## Microsoft Storeへの提出（Partner Center）
 
-### 状況（2026-10-03時点）
+### 状況（2026-10-06時点）
 
-- 製品「shiboq」（Store ID `9MV10MVFX78Z`）は**下書き段階で、まだ「送信して認定を受ける」を押していない**。
-- 完了済み: パッケージ（`shiboq.msix` v1.0.0.0をアップロード、Validated）、プロパティ、
-  Store登録情報（日本語のみ）、申請オプション（runFullTrustの理由）、価格（無料、保存済み）。
-- **残り**: 年齢区分（IARCがアンケートを改訂したため回答し直し。MSIX製品を作り直した際に
-  回答が引き継がれず「アプリの種類」から未選択だった）。「追加のテスト情報」の説明欄が
-  保存されたかも要確認（最後に見た時点では空だった）。全項目が「完了」になったら送信する。
+- 製品「shiboq」（Store ID `9MV10MVFX78Z`）は**Storeで公開済み**（ユーザーから2026-10-06に報告。
+  ストアのページは`https://apps.microsoft.com/detail/9MV10MVFX78Z`。開発環境からは
+  apps.microsoft.comに接続できず、ページの表示はこちらでは確認していない）。
+- 公開中のパッケージは`shiboq.msix` v1.0.0.0。msix.ymlの`4aa0d28`での実行（2026-10-02）で
+  ビルドしたもの。その後v0.3.0までにWindows版へ入った変更は、Web版対応のための
+  ビルドタグ追加とバックエンド呼び出しの整理（`$backend`）だけで、利用者から見た
+  機能は同じ。そのためv0.3.0に合わせたStoreの更新は不要と判断した。
+  （2026-10-05のmsix.yml実行`b13caa2`はActions更新の動作確認用で、Storeには出していない）
 - 入力した値・文章はすべて[`docs/store-submission.md`](./docs/store-submission.md)に控えてある。
   再提出や作り直しのときはそこから転記する。
+
+### 更新の出し方（現状は手動）
+
+Storeは自動更新されない。GitHubのRelease（exe）・Web版とは別の経路で、毎回
+Partner Centerで新しい申請を作って認定を受ける必要がある（審査に数時間〜数日）。
+
+1. `gh workflow run msix.yml -f version=X.Y.Z`（前回より大きい番号。次は`1.0.1`以上）
+2. Artifact `shiboq-msix`を取得（`gh run download <run-id> -n shiboq-msix`）
+3. Partner Centerで製品→「更新」→パッケージを差し替え（必要なら「新機能」欄も更新）→送信
+
+自動化する場合は、Microsoft Store Developer CLI（`microsoft/msstore-cli`。GitHub Actionsでは
+`microsoft/microsoft-store-apppublisher`で導入）の`msstore publish`を使う。前提として
+Partner Centerの「ユーザー管理」でMicrosoft Entra IDのアプリを登録して「マネージャー」
+権限を与え、テナントID・セラーID・クライアントID・クライアントシークレットを
+リポジトリのSecretsに置く必要がある（`msstore reconfigure`に渡す）。未着手。
+シークレットには有効期限があり、切れると公開が失敗する点に注意。
 
 ### 提出で分かった注意点
 

@@ -112,6 +112,8 @@ THIRD_PARTY_LICENSES.md・README.md を同梱）を Release に自動添付し�
 
 ## Microsoft Store 向けパッケージ（MSIX）
 
+Windows 版は Microsoft Store で公開しています: <https://apps.microsoft.com/detail/9MV10MVFX78Z>
+
 署名の無い exe は Windows 11 のスマート アプリ コントロールにブロックされることがあります。
 Microsoft Store 経由で配布すると Store が署名するため、証明書を用意せずに回避できます。
 
