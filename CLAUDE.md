@@ -397,8 +397,10 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
   （Wailsのcgo依存と`frontend/dist`が必要なため）。`GOOS=js go vet`のみ。
   使用中のアクション（checkout@v4・setup-go@v5・setup-node@v4・configure-pages@v5・
   upload-pages-artifact@v3・deploy-pages@v4）はNode 20対象で非推奨の警告が出る
-  （現状は動く。いずれ更新が必要）。deployジョブはGitHub側のランナー待ちで
-  10分以上`queued`のまま止まることがあった（こちらの問題ではなく、待てば進む）。
+  （現状は動く。いずれ更新が必要）。deployジョブがGitHub側で`queued`のまま
+  7時間以上進まなくなったことがある（2026-10-05。環境の保護ルールや承認待ちではなかった）。
+  `concurrency: pages`のため後続の実行も`pending`で止まるので、詰まった実行を
+  `gh run cancel <run-id>`で取り消すと後続が進む（内容は後続の方が新しいので失うものは無い）。
 - **独自ドメイン:** `shiboq.e17.click`（2026-10-05設定）。Route53のホストゾーン`e17.click`
   （`Z003907937M42XWPZX222`）に`shiboq` → `morststs.github.io`のCNAME（TTL 300）を置き、
   Pages設定のカスタムドメインに指定している（Actionsでの公開なので`CNAME`ファイルは
