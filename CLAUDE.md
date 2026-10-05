@@ -400,9 +400,8 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
   deploy-pages@v5・upload-artifact@v7・softprops/action-gh-release@v3）。
   upload-pages-artifact@v4以降はドットファイルを含めない（dist-webには無いので影響なし）。
   更新後、pages.yml（push）とmsix.yml（手動実行、`version=1.0.0`。Artifactを作るだけで
-  Storeには送らない）が成功し、Node 20の警告は消えた。**release.ymlは更新後まだ一度も
-  実行していない**（Releaseを作成・変更するため確認目的では動かさなかった）。次に
-  `v*`タグをpushしたときに、`action-gh-release@v3`で添付まで通るか確認すること。
+  Storeには送らない）が成功し、Node 20の警告は消えた。release.ymlも`v0.3.0`のタグpush
+  （2026-10-06）でビルド・テスト・zip添付まで成功した。
   `ubuntu-latest`は2026-10-19からUbuntu 26へ移行するとの通知が出ている。pages.ymlは
   GoとNodeしか使わないため影響は無い見込み（release/msixは`windows-latest`）。deployジョブがGitHub側で`queued`のまま
   7時間以上進まなくなったことがある（2026-10-05。環境の保護ルールや承認待ちではなかった）。
