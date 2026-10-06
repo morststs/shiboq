@@ -125,14 +125,17 @@ Store 版の更新はこれとは別に手動で行います（下記）。
 署名の無い exe は Windows 11 のスマート アプリ コントロールにブロックされることがあります。
 Microsoft Store 経由で配布すると Store が署名するため、証明書を用意せずに回避できます。
 
-1. [`build/msix/AppxManifest.xml`](./build/msix/AppxManifest.xml) の
-   `Identity`（`Name`・`Publisher`）と `PublisherDisplayName` が、Partner Center の
-   「製品 ID の表示」の値と一致していることを確認する（設定済み。秘密情報ではありません）。
-2. GitHub の Actions タブで「Build MSIX for Microsoft Store」を手動実行し、
-   バージョン（例: `1.0.0`）を入力する。Store の規則で先頭を `0` にはできないため、
-   exe のタグ（`v0.x.y`）とは別の番号になります。
-3. 実行結果の Artifact `shiboq-msix` から `shiboq.msix` をダウンロードし、
-   Partner Center の提出画面にアップロードする。
+`v*` タグ（例: `v0.5.0`）を push すると、GitHub Actions（[`msix.yml`](./.github/workflows/msix.yml)）が
+MSIX（バージョンはタグの先頭に 1 を足した `1.5.0`）をビルドし、Microsoft Store へ申請して
+認定に出します。Store への認証は GitHub Actions の OIDC（Microsoft Entra のフェデレーション
+資格情報）で行い、クライアントシークレットは使いません。初回の準備と運用は
+[`docs/store-auto-publish.md`](./docs/store-auto-publish.md) を参照してください。
+
+手動で出す場合は、Actions タブで「Build MSIX for Microsoft Store」をバージョンと
+`publish`（`none` / `draft` / `submit`）を指定して実行します。`none` なら Artifact
+`shiboq-msix` の `shiboq.msix` をダウンロードして、Partner Center に手でアップロードします。
+[`build/msix/AppxManifest.xml`](./build/msix/AppxManifest.xml) の `Identity`（`Name`・`Publisher`）と
+`PublisherDisplayName` は、Partner Center の「製品 ID の表示」の値に合わせてあります。
 
 MSIX は未署名のまま作ります（Store が審査後に署名します）。そのため、ダウンロードした
 `shiboq.msix` をそのままダブルクリックしてもインストールできません。

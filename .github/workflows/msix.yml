@@ -1,15 +1,37 @@
 name: Build MSIX for Microsoft Store
 
-# Microsoft Store 提出用の MSIX を作る。手動実行専用。
-# 成果物は Release には添付せず、この実行の Artifact としてダウンロードして
-# Partner Center に手でアップロードする（Store が審査後に署名するため、未署名のまま）。
-# release.yml（exe の zip を Release に添付）とは独立しており、Release を作らずに試せる。
+# Microsoft Store 向けの MSIX を作り、Store へ申請する。
+#
+# - v* タグの push（release.yml と同時に動く）: MSIX をビルドし、Store へ申請して
+#   認定（審査）に出す。MSIX のバージョンはタグから決める（下記 Decide version）。
+#   Store 公開用の設定（リポジトリ変数 MSSTORE_*）が未設定なら、ビルドだけ行って申請はしない。
+# - 手動実行: バージョンを指定してビルドし、publish で申請方法を選ぶ。
+#     none   … ビルドだけ（Artifact をダウンロードして Partner Center に手で上げる従来の方法）
+#     draft  … 申請を下書きとして作るだけ（Partner Center で確認してから自分で送信する）
+#     submit … 申請を作って認定に出す
+#
+# Store への認証は GitHub Actions の OIDC トークンを使う（Microsoft Entra のフェデレーション
+# 資格情報）。有効期限のあるクライアントシークレットをリポジトリに置かない。
+# 準備の手順は docs/store-auto-publish.md を参照。
+#
+# MSIX は未署名のまま申請する（Store が審査後に署名する）。
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'MSIX のバージョン（例: 1.0.0）。Store の規則で先頭を 0 にできない'
+        description: 'MSIX のバージョン（例: 1.4.0）。Store の規則で先頭を 0 にできず、公開中より大きくする必要がある'
         required: true
+      publish:
+        description: 'Store への申請'
+        type: choice
+        options:
+          - none
+          - draft
+          - submit
+        default: none
 
 permissions:
   contents: read
@@ -17,9 +39,34 @@ permissions:
 jobs:
   build-msix:
     runs-on: windows-latest
+    outputs:
+      msix_version: ${{ steps.version.outputs.msix_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # タグ vX.Y.Z → MSIX (X+1).Y.Z。exe のタグは v0.x.y で、Store は先頭 0 を受け付けない
+      # ため 1 足す。単調に増えるので、公開中の版より必ず大きくなる（v0.4.0 → 1.4.0）。
+      # 入力値・タグ名は env 経由で渡す（run: に直接展開するとスクリプトとして解釈され得るため）。
+      - name: Decide version
+        id: version
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "::error::タグ $TAG は vX.Y.Z の形ではありません"
+              exit 1
+            fi
+            v="$((BASH_REMATCH[1] + 1)).${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          else
+            v="$INPUT_VERSION"
+          fi
+          echo "MSIX version: $v"
+          echo "msix_version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -46,11 +93,10 @@ jobs:
         shell: bash
         run: go test ./...
 
-      # 入力値は env 経由で渡す（run: に直接展開するとスクリプトとして解釈され得るため）。
       - name: Build MSIX
         shell: pwsh
         env:
-          MSIX_VERSION: ${{ github.event.inputs.version }}
+          MSIX_VERSION: ${{ steps.version.outputs.msix_version }}
         run: ./scripts/build-msix.ps1 -Version $env:MSIX_VERSION
 
       - name: Upload MSIX
@@ -59,3 +105,98 @@ jobs:
           name: shiboq-msix
           path: build/bin/shiboq.msix
           if-no-files-found: error
+
+  publish-store:
+    needs: build-msix
+    # タグの push では、Store 公開用の設定が済んでいるときだけ申請する（未設定でもビルドは成功させる）。
+    # 手動実行で draft / submit を選んだ場合は、未設定なら下の Check settings で失敗させて気づけるようにする。
+    if: >-
+      (github.event_name == 'push' && vars.MSSTORE_CLIENT_ID != '') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'none')
+    runs-on: ubuntu-latest
+    # Entra のフェデレーション資格情報はこの環境名を subject に含める
+    # （repo:morststs/shiboq:environment:microsoft-store）。環境の保護ルールで
+    # 「承認してから申請」にもできる（docs/store-auto-publish.md 参照）。
+    environment:
+      name: microsoft-store
+      url: https://partner.microsoft.com/dashboard
+    permissions:
+      contents: read
+      id-token: write # OIDC トークンの発行に必要。このジョブだけに与える
+    env:
+      STORE_APP_ID: 9MV10MVFX78Z
+      MSSTORE_TENANT_ID: ${{ vars.MSSTORE_TENANT_ID }}
+      MSSTORE_SELLER_ID: ${{ vars.MSSTORE_SELLER_ID }}
+      MSSTORE_CLIENT_ID: ${{ vars.MSSTORE_CLIENT_ID }}
+    steps:
+      - name: Check settings
+        shell: bash
+        run: |
+          missing=""
+          for name in MSSTORE_TENANT_ID MSSTORE_SELLER_ID MSSTORE_CLIENT_ID; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::リポジトリ変数が未設定です:$missing（docs/store-auto-publish.md 参照）"
+            exit 1
+          fi
+
+      - name: Download MSIX
+        uses: actions/download-artifact@v8
+        with:
+          name: shiboq-msix
+          path: msix
+
+      - name: Setup Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.4
+        with:
+          # クライアントアサーション（OIDC）対応は v0.4.2 から。再現性のため版を固定する。
+          version: v0.4.3
+
+      # GitHub の OIDC トークンを、Entra のフェデレーション資格情報が受け付ける
+      # audience で発行し、msstore にクライアントアサーションとして渡す。
+      - name: Get OIDC token
+        shell: bash
+        run: |
+          token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r .value)
+          echo "::add-mask::$token"
+          printf '%s' "$token" > "$RUNNER_TEMP/msstore-assertion"
+          echo "MSSTORE_CLIENT_ASSERTION_FILE=$RUNNER_TEMP/msstore-assertion" >> "$GITHUB_ENV"
+
+      - name: Configure Microsoft Store CLI
+        shell: bash
+        run: |
+          msstore reconfigure --tenantId "$MSSTORE_TENANT_ID" --sellerId "$MSSTORE_SELLER_ID" \
+            --clientId "$MSSTORE_CLIENT_ID" --clientAssertion
+
+      # 注意: Partner Center で作業中の申請（下書き）があると、msstore はそれを削除して
+      # 新しい申請を作り直す。Store の登録情報（説明文・画像）は前回の申請から引き継がれる。
+      - name: Publish to Microsoft Store
+        shell: bash
+        env:
+          PUBLISH_MODE: ${{ github.event_name == 'push' && 'submit' || github.event.inputs.publish }}
+        run: |
+          args=(publish msix/shiboq.msix --appId "$STORE_APP_ID")
+          if [ "$PUBLISH_MODE" = "draft" ]; then
+            args+=(--noCommit)
+          fi
+          echo "msstore ${args[*]}"
+          msstore "${args[@]}"
+
+      - name: Summary
+        shell: bash
+        env:
+          PUBLISH_MODE: ${{ github.event_name == 'push' && 'submit' || github.event.inputs.publish }}
+          MSIX_VERSION: ${{ needs.build-msix.outputs.msix_version }}
+        run: |
+          {
+            echo "### Microsoft Store"
+            echo "- MSIX: $MSIX_VERSION"
+            if [ "$PUBLISH_MODE" = "draft" ]; then
+              echo "- 下書きとして申請を作成しました。Partner Center で確認して「送信」してください。"
+            else
+              echo "- 申請を認定に出しました。審査には数時間〜数日かかります。"
+            fi
+            echo "- Partner Center: https://partner.microsoft.com/dashboard （製品 $STORE_APP_ID）"
+          } >> "$GITHUB_STEP_SUMMARY"

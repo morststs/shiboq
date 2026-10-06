@@ -137,6 +137,7 @@ shiboq/
 ├── build/msix/AppxManifest.xml # MSIXのマニフェスト（Partner Centerの製品IDを書き込む）
 ├── PRIVACY.md              # プライバシーポリシー（Store提出時にURLを入力する）
 ├── docs/store-submission.md # Partner Centerに入力した内容の控え（説明文・審査メモ・画像の作り方等）
+├── docs/store-auto-publish.md # Microsoft Storeへの自動公開の準備手順・運用（msix.yml）
 ├── .devcache/               # go/npmキャッシュのバインドマウント先（.gitignore済み、初回実行時に自動生成）
 ├── docs/superpowers/
 │   ├── specs/2026-08-02-jqrepl-design.md    # 設計仕様書（アプリソースではない。
@@ -498,8 +499,9 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
   別に`1.0.0`以上を指定する。
 - **スクリプトはASCIIのみ**で書く。Windows PowerShell 5.1はBOM無しのスクリプトを
   ANSIとして読むため、日本語を入れると構文解析が壊れ得る。
-- **`.github/workflows/msix.yml`**: 手動実行（`workflow_dispatch`）専用。成果物は
-  Releaseではなく実行のArtifact（`shiboq-msix`）に出す。`release.yml`とは独立。
+- **`.github/workflows/msix.yml`**: `v*`タグのpushと手動実行で動く。`build-msix`（windows）が
+  MSIXを作ってArtifact（`shiboq-msix`）に出し、`publish-store`（ubuntu）がStoreへ申請する。
+  `release.yml`とは独立（タグのpushで両方が同時に動く）。詳細は下記「更新の出し方」。
 - ロゴは修飾子無しのファイル名のみ（`targetsize-*`・`scale-*`の派生は持たない）。
   派生を使うには`resources.pri`（MakePri）が必要になるため、今は入れていない。
 
@@ -523,21 +525,37 @@ GitHubのRelease本文は、Store版（とWeb版）へのリンクを先頭に�
 使えない人向けに引き続き添付している。リリースノート本体は従来どおり注釈付きタグの
 メッセージに書く（Release本文には入らない）。
 
-### 更新の出し方（現状は手動）
+### 更新の出し方（自動公開。2026-10-06に仕組みを用意、Entra側の準備は未完了）
 
-Storeは自動更新されない。GitHubのRelease（exe）・Web版とは別の経路で、毎回
-Partner Centerで新しい申請を作って認定を受ける必要がある（審査に数時間〜数日）。
+`v*`タグをpushすると`msix.yml`がMSIXをビルドし、`msstore publish`でStoreへ申請して認定に出す。
+利用者向けの準備手順・運用・トラブルシュートは[`docs/store-auto-publish.md`](./docs/store-auto-publish.md)。
 
-1. `gh workflow run msix.yml -f version=X.Y.Z`（前回より大きい番号。次は`1.0.1`以上）
-2. Artifact `shiboq-msix`を取得（`gh run download <run-id> -n shiboq-msix`）
-3. Partner Centerで製品→「更新」→パッケージを差し替え（必要なら「新機能」欄も更新）→送信
-
-自動化する場合は、Microsoft Store Developer CLI（`microsoft/msstore-cli`。GitHub Actionsでは
-`microsoft/microsoft-store-apppublisher`で導入）の`msstore publish`を使う。前提として
-Partner Centerの「ユーザー管理」でMicrosoft Entra IDのアプリを登録して「マネージャー」
-権限を与え、テナントID・セラーID・クライアントID・クライアントシークレットを
-リポジトリのSecretsに置く必要がある（`msstore reconfigure`に渡す）。未着手。
-シークレットには有効期限があり、切れると公開が失敗する点に注意。
+- **MSIXのバージョン**: タグ`vX.Y.Z`→`(X+1).Y.Z`（`v0.4.0`→`1.4.0`）。Storeは先頭0不可で、
+  公開中より大きい番号が必要なため。手動実行では`version`を指定する。
+- **認証はOIDC**（クライアントシークレットを使わない）: `publish-store`ジョブだけが
+  `id-token: write`を持ち、`$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange`で
+  発行したトークンを`MSSTORE_CLIENT_ASSERTION_FILE`経由で`msstore reconfigure --clientAssertion`に
+  渡す。msstore CLIのクライアントアサーション対応はv0.4.2から（PR #145）。CLIはv0.4.3に固定し、
+  `microsoft/microsoft-store-apppublisher@v1.4`で入れる。Entraのフェデレーション資格情報の
+  サブジェクトは`repo:morststs/shiboq:environment:microsoft-store`。
+- **GitHub環境`microsoft-store`**（2026-10-06作成）: デプロイできるのは`main`ブランチと`v*`タグのみ。
+  必要なら利用者がRequired reviewersを足して「承認してから申請」にできる。
+- **リポジトリ変数**（Secretsではない。どれも秘密情報ではない）: `MSSTORE_TENANT_ID`・
+  `MSSTORE_SELLER_ID`・`MSSTORE_CLIENT_ID`。**未設定の間は、タグのpushでもビルドだけで申請は
+  スキップする**（`publish-store`の`if`）。手動実行で`draft`/`submit`を選んだときに未設定なら
+  `Check settings`で失敗させる。
+- **手動実行の`publish`**: `none`（ビルドのみ。Artifactを手でアップロードする従来の方法）、
+  `draft`（`--noCommit`。申請を下書きで作る）、`submit`（認定に出す）。
+- **`msstore publish`の挙動（ソースで確認）**: Partner Centerに送信前の申請があると**削除して
+  作り直す**（初回申請時を除く）。前回の`.msix`は`PendingDelete`にして新しいものに差し替える。
+  登録情報は公開中の申請から引き継がれる。publishに渡すのは`.msix`のパス（`MSIXProjectPublisher`が
+  拡張子で判定）と`--appId 9MV10MVFX78Z`（Store ID）。
+- **未確認**: Entraアプリ・フェデレーション資格情報・変数がまだ無いため、`publish-store`ジョブは
+  一度も実行していない。準備ができたら`gh workflow run msix.yml -f version=1.4.0 -f publish=draft`で
+  初回確認する（v0.4.0の内容をStoreに出すことにもなる）。Partner Centerの画面名は
+  msstore CLIのソース（`CLIConfigurator.cs`の案内文）から取った英語表記で、日本語UIの表記は未確認。
+- 手動で出す場合（自動公開が使えないとき）: `gh workflow run msix.yml -f version=X.Y.Z`→
+  `gh run download <run-id> -n shiboq-msix`→Partner Centerで製品→「更新」→パッケージを差し替え→送信。
 
 ### 提出で分かった注意点
 
@@ -546,8 +564,7 @@ Partner Centerの「ユーザー管理」でMicrosoft Entra IDのアプリを登
   （Storeは署名しない）ため、スマート アプリ コントロール回避という目的を果たせない。
   種類は作成後に変更できないので、作り直して名前を移した。
 - **更新を出すときはMSIXのバージョンを上げる**（`1.0.0`の次は`1.0.1`以上）。
-  `.github/workflows/msix.yml`を`gh workflow run msix.yml -f version=X.Y.Z`で実行し、
-  Artifact `shiboq-msix`をダウンロードしてアップロードする。Chromeはzip内の未署名
+  手でArtifact `shiboq-msix`をダウンロードしてアップロードする場合、Chromeはzip内の未署名
   実行ファイルを理由にダウンロードをブロックすることがあり、`Ctrl+J`から「保存」で通せる
   （`gh run download <run-id> -n shiboq-msix`でも取得できる）。
 - Partner Centerの入力欄の制約: runFullTrustの理由は**500文字まで**。キーワードは
