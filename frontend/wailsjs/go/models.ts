@@ -1,5 +1,21 @@
 export namespace main {
 	
+	export class EngineInfo {
+	    engine: string;
+	    engineVersion: string;
+	    jqLanguageVersion: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EngineInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.engine = source["engine"];
+	        this.engineVersion = source["engineVersion"];
+	        this.jqLanguageVersion = source["jqLanguageVersion"];
+	    }
+	}
 	export class RunResult {
 	    result: string;
 	    error: string;

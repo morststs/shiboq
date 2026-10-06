@@ -76,6 +76,8 @@ func callJqService(s *JqService, method, argsJSON string) (string, error) {
 			return "", err
 		}
 		out = schema
+	case "EngineInfo":
+		out = s.EngineInfo()
 	default:
 		return "", fmt.Errorf("未知のメソッドです: %s", method)
 	}

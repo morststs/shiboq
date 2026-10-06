@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-Last updated / 最終更新日: 2026-10-05
+Last updated / 最終更新日: 2026-10-06
 
 ## English
 
@@ -23,6 +23,7 @@ None. shiboq does not collect, transmit, or share any personal information.
 
 - shiboq reads a file only when you choose it in the "open file" dialog.
 - shiboq writes to the clipboard only when you press a copy button. It does not read the clipboard.
+- The help screen contains links to external documentation (the jq manual and gojq on GitHub). They open in your web browser only when you click them.
 
 ### Third-party components
 
@@ -67,6 +68,7 @@ shiboqは、お使いのコンピューター上でJSONに対してjqクエリ�
 
 - ファイルを読み込むのは、「ファイルを開く」ダイアログで利用者が選択した場合のみです。
 - クリップボードへ書き込むのは、利用者がコピーボタンを押した場合のみです。クリップボードの内容を読み取ることはありません。
+- ヘルプ画面には外部の資料（jqの公式マニュアル、GitHub上のgojq）へのリンクがあります。リンクを押したときにだけ、Webブラウザで開きます。
 
 ### 第三者のコンポーネント
 

@@ -4,6 +4,9 @@
   import SchemaPane from './SchemaPane.svelte';
   import QueryPane from './QueryPane.svelte';
   import ResultPane from './ResultPane.svelte';
+  import SamplesPane from './SamplesPane.svelte';
+  import HelpDialog from './HelpDialog.svelte';
+  import samples from './samples.json';
   import { onMount, onDestroy } from 'svelte';
   // デスクトップ版（Wails）とWeb版で実装を差し替える。vite.config.js参照。
   import {
@@ -16,6 +19,8 @@
     SaveItem,
     ListSaved,
     DeleteSaved,
+    EngineInfo,
+    OpenURL,
   } from '$backend';
 
   const SAMPLE_JSON = '{\n  "name": "taro",\n  "age": 20,\n  "tags": ["admin", "user"],\n  "address": {\n    "city": "tokyo"\n  }\n}';
@@ -45,6 +50,12 @@
   let deleteTargetId = $state(null);
   let toastMessage = $state('');
   let toastTimer = null;
+  // 左ペインのタブ（'saved' | 'samples'）と、選択中のサンプル（"章ID/サンプルID"）。
+  let leftTab = $state('saved');
+  let selectedSampleKey = $state(null);
+  let helpOpen = $state(false);
+  // ヘルプに表示するjqエンジンのバージョン情報（JqService.EngineInfo）。
+  let engineInfo = $state(null);
 
   let flatKeys = $derived(flattenKeys(schemaNodes));
 
@@ -189,6 +200,40 @@
     errorMessage = '';
     resultStale = false;
     selectedSavedId = item.id;
+    selectedSampleKey = null;
+  }
+
+  // --- 学習用サンプル ---
+
+  // サンプルのJSONとクエリを読み込み、すぐに実行する（500msのデバウンスを待たせない）。
+  // 生出力(-r)はサンプルの指定に合わせるが、利用者の設定としては保存しない
+  // （localStorageに書くのはチェックボックスを自分で操作したときだけ）。
+  function loadSample(chapterId, sampleId) {
+    const sample = samples.chapters
+      .find((c) => c.id === chapterId)
+      ?.samples.find((x) => x.id === sampleId);
+    if (!sample) return;
+    jsonText = JSON.stringify(samples.datasets[sample.data], null, 2);
+    query = sample.query;
+    rawOutput = !!sample.raw;
+    selectedSampleKey = `${chapterId}/${sampleId}`;
+    selectedSavedId = null;
+    clearTimeout(debounceTimer);
+    evaluate();
+  }
+
+  function selectLeftTab(tab) {
+    leftTab = tab;
+    try {
+      localStorage.setItem(LEFT_TAB_STORAGE_KEY, tab);
+    } catch (e) {
+      // 保存できなくても切り替え自体は成立する
+    }
+  }
+
+  function showSamplesFromHelp() {
+    helpOpen = false;
+    selectLeftTab('samples');
   }
 
   // --- 保存 ---
@@ -218,6 +263,8 @@
         result,
       });
       selectedSavedId = saved.id;
+      // サンプルのタブを見ていても、保存した項目が一覧に現れたことが分かるようにする
+      leftTab = 'saved';
       await refreshSaved();
     } catch (e) {
       showToast('保存できませんでした');
@@ -258,7 +305,8 @@
       return;
     }
     if (e.key === 'Escape') {
-      if (saveDialogOpen) cancelSave();
+      if (helpOpen) helpOpen = false;
+      else if (saveDialogOpen) cancelSave();
       else if (deleteTargetId) cancelDelete();
     }
   }
@@ -297,6 +345,7 @@
   // 踏襲し、localStorageへ幅を永続化する。
   const SAVED_WIDTH_STORAGE_KEY = 'shiboq.savedWidth';
   const RAW_OUTPUT_STORAGE_KEY = 'shiboq.rawOutput';
+  const LEFT_TAB_STORAGE_KEY = 'shiboq.leftTab';
   const SAVED_MIN_WIDTH = 160;
   const SAVED_MAX_WIDTH = 500;
   let savedWidth = $state(260);
@@ -331,7 +380,18 @@
       savedWidth = clampSavedWidth(storedWidth);
     }
     rawOutput = localStorage.getItem(RAW_OUTPUT_STORAGE_KEY) === '1';
-    refreshSaved();
+    const storedTab = localStorage.getItem(LEFT_TAB_STORAGE_KEY);
+    refreshSaved().then(() => {
+      // 一度もタブを選んでいない人には、保存が空ならサンプルを先に見せる
+      // （初めて使う人が学習用の例題に気づけるように）。
+      if (storedTab === 'saved' || storedTab === 'samples') leftTab = storedTab;
+      else leftTab = savedItems.length === 0 ? 'samples' : 'saved';
+    });
+    EngineInfo()
+      .then((info) => (engineInfo = info))
+      .catch(() => {
+        // 取得できなくてもヘルプ本文は表示できる（バージョン欄が「…」になるだけ）
+      });
   });
 
   onDestroy(() => {
@@ -344,15 +404,25 @@
 
 <div class="app-layout" class:dragging={draggingSaved}>
   <div class="saved-col" style="width: {savedWidth}px">
-    <SavedPane
-      items={savedItems}
-      selectedId={selectedSavedId}
-      {canSave}
-      saveDisabledReason={SAVE_DISABLED_REASON}
-      onSelect={restoreSaved}
-      onRequestSave={openSaveDialog}
-      onRequestDelete={requestDelete}
-    />
+    <div class="left-tabs" role="tablist">
+      <button role="tab" aria-selected={leftTab === 'saved'} class:active={leftTab === 'saved'} onclick={() => selectLeftTab('saved')}>保存</button>
+      <button role="tab" aria-selected={leftTab === 'samples'} class:active={leftTab === 'samples'} onclick={() => selectLeftTab('samples')}>サンプル</button>
+    </div>
+    <div class="left-body">
+      {#if leftTab === 'samples'}
+        <SamplesPane chapters={samples.chapters} selectedKey={selectedSampleKey} onSelect={loadSample} />
+      {:else}
+        <SavedPane
+          items={savedItems}
+          selectedId={selectedSavedId}
+          {canSave}
+          saveDisabledReason={SAVE_DISABLED_REASON}
+          onSelect={restoreSaved}
+          onRequestSave={openSaveDialog}
+          onRequestDelete={requestDelete}
+        />
+      {/if}
+    </div>
   </div>
   <!-- ドラッグ操作のみのリサイズハンドル。sirusita（参考プロジェクト）のsplitterと同じ
        パターンで、キーボード操作の代替手段は無い（既知の制約、将来的にはrole="separator"
@@ -369,7 +439,7 @@
     <div class="pane-slot"><SchemaPane nodes={schemaNodes} {usedKeys} errorMessage={schemaError} onCopy={copySchema} /></div>
   </div>
   <div class="col">
-    <div class="pane-slot"><QueryPane value={query} onChange={(v) => (query = v)} {errorMessage} getKeys={() => Array.from(flatKeys)} /></div>
+    <div class="pane-slot"><QueryPane value={query} onChange={(v) => (query = v)} {errorMessage} getKeys={() => Array.from(flatKeys)} onHelp={() => (helpOpen = true)} /></div>
     <div class="pane-slot"><ResultPane value={result} stale={resultStale} raw={rawOutput} onRawChange={handleRawChange} /></div>
   </div>
 </div>
@@ -419,6 +489,10 @@
   </div>
 {/if}
 
+{#if helpOpen}
+  <HelpDialog {engineInfo} onClose={() => (helpOpen = false)} onOpenUrl={OpenURL} onShowSamples={showSamplesFromHelp} />
+{/if}
+
 {#if toastMessage}
   <div class="toast">{toastMessage}</div>
 {/if}
@@ -435,6 +509,37 @@
   }
   .saved-col {
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: #252526;
+  }
+  .left-tabs {
+    display: flex;
+    flex-shrink: 0;
+    border-bottom: 1px solid #3c3c3c;
+  }
+  .left-tabs button {
+    flex: 1;
+    padding: 6px 0;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: #969696;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .left-tabs button:hover {
+    color: #e7e7e7;
+  }
+  .left-tabs button.active {
+    border-bottom-color: #007acc;
+    color: #e7e7e7;
+  }
+  .left-body {
+    flex: 1;
+    min-height: 0;
   }
   .splitter {
     width: 5px;

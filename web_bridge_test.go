@@ -85,3 +85,17 @@ func TestCallJqServiceMissingArgs(t *testing.T) {
 		t.Fatal("expected error for missing args")
 	}
 }
+
+func TestCallJqServiceEngineInfo(t *testing.T) {
+	out, err := callJqService(NewJqService(), "EngineInfo", `[]`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var info EngineInfo
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if info.Engine != "gojq" || info.EngineVersion != gojqVersion {
+		t.Fatalf("info = %+v", info)
+	}
+}

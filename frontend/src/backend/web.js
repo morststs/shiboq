@@ -121,6 +121,15 @@ export function SchemaJSON(jsonText) {
   return analysisWorker.call('SchemaJSON', [jsonText]);
 }
 
+export function EngineInfo() {
+  return analysisWorker.call('EngineInfo', []);
+}
+
+// 編集中の内容を失わないよう、外部リンクは別タブで開く。
+export function OpenURL(url) {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 // デスクトップ版（app.goのmaxOpenJSONFileSize）と同じ上限・同じ文言。
 const MAX_OPEN_JSON_FILE_SIZE = 20 * 1024 * 1024;
 

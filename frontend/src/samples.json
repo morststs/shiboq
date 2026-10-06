@@ -1,0 +1,459 @@
+{
+  "datasets": {
+    "shop": {
+      "store": "しぼQ商店",
+      "updatedAt": "2026-10-01T09:00:00Z",
+      "products": [
+        { "id": 1, "name": "りんご", "category": "果物", "price": 120, "stock": 30, "tags": ["国産", "旬"] },
+        { "id": 2, "name": "バナナ", "category": "果物", "price": 98, "stock": 0, "tags": ["輸入"] },
+        { "id": 3, "name": "にんじん", "category": "野菜", "price": 80, "stock": 12, "tags": ["国産"] },
+        { "id": 4, "name": "牛乳", "category": "乳製品", "price": 210, "stock": 5, "tags": [] },
+        { "id": 5, "name": "チーズ", "category": "乳製品", "price": 450, "stock": 8, "tags": ["輸入", "セール"], "discount": 0.2 }
+      ],
+      "orders": [
+        {
+          "id": "A-001",
+          "customer": { "name": "佐藤", "email": "sato@example.com" },
+          "items": [{ "productId": 1, "qty": 3 }, { "productId": 4, "qty": 1 }],
+          "status": "shipped"
+        },
+        {
+          "id": "A-002",
+          "customer": { "name": "鈴木", "email": null },
+          "items": [{ "productId": 5, "qty": 2 }],
+          "status": "pending"
+        },
+        {
+          "id": "A-003",
+          "customer": { "name": "高橋", "email": "takahashi@example.org" },
+          "items": [{ "productId": 2, "qty": 6 }, { "productId": 3, "qty": 2 }, { "productId": 1, "qty": 1 }],
+          "status": "shipped"
+        }
+      ]
+    },
+    "members": {
+      "会員": [
+        { "氏名": "佐藤", "会員番号": "M-01", "ポイント": 120 },
+        { "氏名": "鈴木", "会員番号": "M-02", "ポイント": 45 }
+      ]
+    },
+    "logs": {
+      "logs": [
+        "2026-10-01 09:00:12 INFO user=sato action=login",
+        "2026-10-01 09:03:45 WARN user=suzuki action=login retry=2",
+        "2026-10-01 09:04:01 ERROR user=suzuki action=checkout code=E42",
+        "2026-10-01 09:10:30 INFO user=takahashi action=logout"
+      ]
+    }
+  },
+  "chapters": [
+    {
+      "id": "basics",
+      "title": "1. 値を取り出す",
+      "samples": [
+        {
+          "id": "identity",
+          "title": "そのまま出力する .",
+          "data": "shop",
+          "query": ".",
+          "explain": "`.` は「いま手元にある値」そのものです。入力全体をそのまま整形して出力します。jq のクエリは、この `.` を少しずつ加工していく形で書きます。",
+          "try": "JSON の値を書き換えると、結果が自動で更新されることを確かめてみましょう。"
+        },
+        {
+          "id": "field",
+          "title": "キーの値を取り出す .store",
+          "data": "shop",
+          "query": ".store",
+          "explain": "`.キー名` でオブジェクトの値を取り出します。存在しないキーを指定してもエラーにはならず `null` が返ります。",
+          "try": "`.updatedAt` や、存在しない `.owner` に変えてみましょう。"
+        },
+        {
+          "id": "nested",
+          "title": "入れ子をたどる",
+          "data": "shop",
+          "query": ".orders[0].customer.name",
+          "explain": "`.` をつなげると入れ子をたどれます。`[0]` は配列の先頭要素です（0 から数えます）。",
+          "try": "`[0]` を `[2]` にしたり、`.name` を `.email` にしてみましょう。"
+        },
+        {
+          "id": "index-slice",
+          "title": "末尾の要素と範囲 [-1] [1:3]",
+          "data": "shop",
+          "query": ".products[-1].name, .products[1:3]",
+          "explain": "負のインデックスは後ろから数えます（`[-1]` は最後）。`[1:3]` は 1 番目から 3 番目の手前まで、つまり 2 件を取り出します。`,` で区切ると、複数の結果を順に出力します。",
+          "try": "`[1:3]` を `[:2]` や `[3:]` にしてみましょう。"
+        },
+        {
+          "id": "quoted-key",
+          "title": "日本語などのキー .\"会員\"",
+          "data": "members",
+          "query": ".\"会員\"[] | .\"氏名\"",
+          "explain": "英数字と `_` 以外の文字（日本語・空白・記号など）を含むキーは `.会員` とは書けず、構文エラーになります。`.\"会員\"` のように引用符で囲むか、`.[\"会員\"]` と書きます。",
+          "try": "`.\"氏名\"` を `.[\"ポイント\"]` にしてみましょう。わざと `.会員` と書いてエラーも見てみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "arrays",
+      "title": "2. 配列を展開する",
+      "samples": [
+        {
+          "id": "iterate",
+          "title": "要素を1つずつ出す .[]",
+          "data": "shop",
+          "query": ".products[].name",
+          "explain": "`[]` は配列の要素を 1 つずつ取り出します。結果が 1 行に 1 つずつ、複数出力されることに注目してください（JSON の配列ではありません）。",
+          "try": "`.name` を `.price` にしてみましょう。"
+        },
+        {
+          "id": "pipe",
+          "title": "パイプでつなぐ |",
+          "data": "shop",
+          "query": ".orders[] | .customer | .name",
+          "explain": "`|` は左の結果を右の入力として渡します。左が複数の値を出すと、右はそれぞれに対して実行されます。`.orders[].customer.name` と同じ意味です。",
+          "try": "最後の `.name` を `{name, email}` にしてみましょう（次の章で詳しく扱います）。"
+        },
+        {
+          "id": "collect",
+          "title": "結果を配列にまとめる [ ]",
+          "data": "shop",
+          "query": "[.products[].name]",
+          "explain": "クエリ全体を `[ ]` で囲むと、複数の結果を 1 つの配列にまとめます。「バラバラに出てきた結果を JSON 配列にしたい」ときの定番です。",
+          "try": "`[ ]` を外すと結果がどう変わるか比べてみましょう。"
+        },
+        {
+          "id": "map-length",
+          "title": "map と length",
+          "data": "shop",
+          "query": ".products | map(.price), length",
+          "explain": "`map(f)` は配列の各要素に `f` を適用した新しい配列を返します（`[.[] | f]` と同じ）。`length` は配列なら要素数、文字列なら文字数、オブジェクトならキーの数です。",
+          "try": "`map(.price)` を `map(.price * 2)` にしてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "objects",
+      "title": "3. オブジェクトを組み立てる",
+      "samples": [
+        {
+          "id": "pick-fields",
+          "title": "必要なキーだけ残す {name, price}",
+          "data": "shop",
+          "query": ".products[] | {name, price}",
+          "explain": "`{name, price}` は `{name: .name, price: .price}` の省略形です。大きなオブジェクトから必要な項目だけを抜き出すときに使います。",
+          "try": "`category` を追加してみましょう。"
+        },
+        {
+          "id": "computed",
+          "title": "新しいキーと計算した値",
+          "data": "shop",
+          "query": ".products[] | {\"商品\": .name, \"税込\": (.price * 1.1 | floor)}",
+          "explain": "キー名は自由に付けられますが、英数字と `_` 以外（日本語など）を含むキー名は `\"商品\"` のように引用符で囲みます。値にパイプなどの式を書くときは `( )` で囲みます。`floor` は小数点以下を切り捨てます。",
+          "try": "`floor` を `round` に変えてみましょう。"
+        },
+        {
+          "id": "dynamic-key",
+          "title": "値をキーにする {(.name): .price}",
+          "data": "shop",
+          "query": ".products | map({(.name): .price}) | add",
+          "explain": "キーを `( )` で囲むと、式の結果をキー名にできます。`add` はオブジェクトの配列を 1 つのオブジェクトに合成します（数値なら合計、文字列なら連結）。",
+          "try": "`.price` を `.stock` にして、在庫表を作ってみましょう。"
+        },
+        {
+          "id": "keys-entries",
+          "title": "キーの一覧と to_entries",
+          "data": "shop",
+          "query": ".orders[0] | keys, (.customer | to_entries)",
+          "explain": "`keys` はキー名の配列を返します。`to_entries` は `{key, value}` の配列に変換します。キー名そのものを扱いたいときに使います。",
+          "try": "`to_entries` の後ろに `| map(.key)` を付けてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "select",
+      "title": "4. 条件で絞り込む",
+      "samples": [
+        {
+          "id": "select-eq",
+          "title": "条件に合うものだけ select",
+          "data": "shop",
+          "query": ".products[] | select(.stock == 0) | .name",
+          "explain": "`select(条件)` は条件が真のときだけ値を通し、偽なら何も出力しません。品切れの商品だけを取り出しています。",
+          "try": "`.stock == 0` を `.stock < 10` にしてみましょう。"
+        },
+        {
+          "id": "select-and",
+          "title": "and / or で組み合わせる",
+          "data": "shop",
+          "query": ".products[] | select(.category == \"果物\" and .price >= 100) | .name",
+          "explain": "`and` `or` `not` で条件を組み合わせます。`not` は `select(.stock > 0 | not)` のように後ろに付けます。",
+          "try": "`and` を `or` にすると結果がどう増えるか見てみましょう。"
+        },
+        {
+          "id": "select-any",
+          "title": "配列に含まれるか any",
+          "data": "shop",
+          "query": ".products[] | select(any(.tags[]; . == \"輸入\")) | .name",
+          "explain": "`any(生成式; 条件)` は、生成された値のどれか 1 つでも条件を満たせば真です。タグに「輸入」を含む商品を探しています。全部が満たすか調べるには `all` を使います。",
+          "try": "\"輸入\" を \"国産\" にしてみましょう。"
+        },
+        {
+          "id": "select-null",
+          "title": "null を探す",
+          "data": "shop",
+          "query": ".orders[] | select(.customer.email == null) | .id",
+          "explain": "値が `null` のものも、存在しないキーも、どちらも `== null` で見つけられます。メールアドレスが未登録の注文を探しています。",
+          "try": "`== null` を `!= null` にしてみましょう。"
+        },
+        {
+          "id": "count",
+          "title": "条件に合う件数を数える",
+          "data": "shop",
+          "query": ".products | map(select(.stock > 0)) | length",
+          "explain": "`map(select(...))` で配列のまま絞り込み、`length` で件数を数えます。配列を保ったまま絞り込みたいときの定番の組み合わせです。",
+          "try": "`length` を `map(.name)` にしてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "transform",
+      "title": "5. 既定値・条件分岐・並べ替え",
+      "samples": [
+        {
+          "id": "alternative",
+          "title": "既定値を補う //",
+          "data": "shop",
+          "query": ".products[] | {name, discount: (.discount // 0)}",
+          "explain": "`a // b` は、`a` が `null` か `false`（または何も出力しない）ときに `b` を使います。存在しないキーに既定値を入れるときに便利です。",
+          "try": "`0` を `\"なし\"` にしてみましょう。"
+        },
+        {
+          "id": "if-then",
+          "title": "条件で値を変える if",
+          "data": "shop",
+          "query": ".products[] | {name, \"在庫\": (if .stock == 0 then \"品切れ\" elif .stock < 10 then \"残りわずか\" else \"あり\" end)}",
+          "explain": "`if 条件 then A elif 条件 then B else C end` で値を切り替えます。jq 1.7 以降は `else` を省略でき、省略すると元の値がそのまま返ります。",
+          "try": "しきい値の `10` を変えてみましょう。"
+        },
+        {
+          "id": "sort",
+          "title": "並べ替える sort_by",
+          "data": "shop",
+          "query": ".products | sort_by(.price) | reverse | map(\"\\(.name) \\(.price)円\")",
+          "explain": "`sort_by(.price)` は値段の安い順に並べ、`reverse` で逆順にします。最大・最小の 1 件だけ欲しいなら `max_by(.price)` / `min_by(.price)` が使えます。",
+          "try": "`sort_by(.price)` を `sort_by(.stock)` にしてみましょう。"
+        },
+        {
+          "id": "try-catch",
+          "title": "エラーを扱う try / ?",
+          "data": "shop",
+          "query": "[\"120\", \"abc\", .store] | map(try tonumber catch \"数値ではない\")",
+          "explain": "`try 式 catch 代わりの値` でエラーを受け止めます。`式?` と書くとエラーを無視して何も出力しません（`map(tonumber?)` など）。",
+          "try": "`try ... catch ...` を `tonumber?` だけにしてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "aggregate",
+      "title": "6. 集計する",
+      "samples": [
+        {
+          "id": "sum-min-max",
+          "title": "合計・最小・最大",
+          "data": "shop",
+          "query": ".products | map(.price) | {\"合計\": add, \"最安\": min, \"最高\": max, \"平均\": (add / length)}",
+          "explain": "数値の配列に `add` を使うと合計、`min` / `max` で最小・最大が得られます。平均は `add / length` で計算します。",
+          "try": "`.price` を `.stock` にしてみましょう。"
+        },
+        {
+          "id": "group-by",
+          "title": "グループ分け group_by",
+          "data": "shop",
+          "query": ".products | group_by(.category) | map({category: .[0].category, \"件数\": length, \"商品\": map(.name)})",
+          "explain": "`group_by(.category)` は同じカテゴリの要素ごとに配列をまとめた「配列の配列」を返します。各グループの先頭 `.[0]` からカテゴリ名を取り出しています。",
+          "try": "`\"件数\"` の代わりに `\"在庫合計\": (map(.stock) | add)` を作ってみましょう。"
+        },
+        {
+          "id": "flatten-sum",
+          "title": "入れ子の値を合計する",
+          "data": "shop",
+          "query": "[.orders[].items[].qty] | add",
+          "explain": "`[]` を重ねると入れ子の配列もまとめて展開できます。全注文の数量を集めて合計しています。",
+          "try": "`add` を `length` にすると何が数えられるか考えてみましょう。"
+        },
+        {
+          "id": "unique",
+          "title": "重複を除く unique",
+          "data": "shop",
+          "query": "[.products[].tags[]] | unique",
+          "explain": "`unique` は重複を取り除いて並べ替えます。キーを指定して重複を除くなら `unique_by(.category)` を使います。",
+          "try": "`unique` の後ろに `| length` を付けてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "variables",
+      "title": "7. 変数・reduce・関数",
+      "samples": [
+        {
+          "id": "as-variable",
+          "title": "値を変数に入れる as $x",
+          "data": "shop",
+          "query": ".store as $s | .orders[] | \"\\($s) 注文 \\(.id)\"",
+          "explain": "`式 as $名前 | ...` で値を変数に入れ、後ろの式から参照できます。パイプで `.` が変わっていっても、変数に入れた値は変わりません。",
+          "try": "`.updatedAt as $t` を前に足して、文字列に `\\($t)` を加えてみましょう。"
+        },
+        {
+          "id": "join-lookup",
+          "title": "別の配列を参照して結合する",
+          "data": "shop",
+          "query": "INDEX(.products[]; .id) as $p | .orders[] | {id, \"合計\": (.items | map($p[.productId | tostring].price * .qty) | add)}",
+          "explain": "`INDEX(生成式; キー)` は、キー（文字列）から要素を引ける辞書を作ります。それを変数に入れて、注文の商品 ID から単価を引き、金額を合計しています。",
+          "try": "`\"合計\"` の隣に `\"商品\": (.items | map($p[.productId | tostring].name))` を追加してみましょう。"
+        },
+        {
+          "id": "reduce",
+          "title": "畳み込む reduce",
+          "data": "shop",
+          "query": "reduce .orders[] as $o ({}; .[$o.status] += 1)",
+          "explain": "`reduce 生成式 as $x (初期値; 更新式)` は、値を 1 つずつ受け取りながら結果を育てます。ここでは状態ごとの注文数を数えています（`null + 1` は `1` になります）。",
+          "try": "`+= 1` を `+= ($o.items | length)` にしてみましょう。"
+        },
+        {
+          "id": "def",
+          "title": "関数を定義する def",
+          "data": "shop",
+          "query": "def with_tax: . * 1.1 | floor; .products[] | {name, \"税込\": (.price | with_tax)}",
+          "explain": "`def 名前: 本体;` で関数を定義できます。何度も使う計算に名前を付けると、クエリが読みやすくなります。関数名に使えるのは英数字と `_` だけです。引数付きの `def f(x): ...;` も書けます。",
+          "try": "`def discounted: .price * (1 - (.discount // 0));` を定義して、`.products[] | {name, \"割引後\": discounted}` としてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "strings",
+      "title": "8. 文字列と正規表現",
+      "samples": [
+        {
+          "id": "interpolation",
+          "title": "文字列に埋め込む \\( )",
+          "data": "shop",
+          "query": ".orders[] | \"\\(.id): \\(.customer.name)様 \\(.items | length)点\"",
+          "raw": true,
+          "explain": "文字列の中で `\\(式)` と書くと、式の結果が埋め込まれます。このサンプルは結果ペインの「生出力 (-r)」がオンになり、引用符なしで表示されます。",
+          "try": "「生出力 (-r)」のチェックを外すと表示がどう変わるか見てみましょう。"
+        },
+        {
+          "id": "split-join",
+          "title": "分割と連結 split / join",
+          "data": "shop",
+          "query": ".products[] | \"\\(.name): \\(.tags | join(\"・\"))\"",
+          "raw": true,
+          "explain": "`join(区切り)` は配列を 1 つの文字列に連結し、`split(区切り)` は文字列を配列に分割します。`ascii_downcase` / `ltrimstr` / `startswith` なども使えます。",
+          "try": "`.updatedAt | split(\"T\")` を試してみましょう。"
+        },
+        {
+          "id": "test",
+          "title": "正規表現で判定する test",
+          "data": "shop",
+          "query": ".orders[] | select(.customer.email // \"\" | test(\"@example\\\\.com$\")) | .id",
+          "explain": "`test(正規表現)` は一致すれば真を返します。JSON の文字列なので `\\.` は `\\\\.` と書きます。メールが未登録（null）の注文は `// \"\"` で空文字にしてから調べています。",
+          "try": "`test(\"EXAMPLE\"; \"i\")` のようにフラグ `i` で大文字小文字を無視してみましょう。"
+        },
+        {
+          "id": "capture",
+          "title": "正規表現で取り出す capture",
+          "data": "logs",
+          "query": ".logs[] | capture(\"^(?<date>\\\\S+) (?<time>\\\\S+) (?<level>[A-Z]+) user=(?<user>\\\\w+)\")",
+          "explain": "`capture` は名前付きグループ `(?<名前>...)` に一致した部分をオブジェクトにします。ログの 1 行を構造化データに変換しています。",
+          "try": "後ろに `| select(.level != \"INFO\")` を付けてみましょう。"
+        },
+        {
+          "id": "gsub",
+          "title": "置換する sub / gsub",
+          "data": "shop",
+          "query": ".orders[] | .customer.email // \"未登録\" | sub(\"^[^@]+\"; \"***\")",
+          "explain": "`sub(正規表現; 置換後)` は最初の一致を、`gsub` はすべての一致を置き換えます。メールアドレスのユーザー名部分を伏せ字にしています。",
+          "try": "`sub` を `gsub(\"[a-z]\"; \"x\")` にしてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "formats",
+      "title": "9. 出力の形式",
+      "samples": [
+        {
+          "id": "csv",
+          "title": "CSV にする @csv",
+          "data": "shop",
+          "query": "[\"id\", \"name\", \"price\"], (.products[] | [.id, .name, .price]) | @csv",
+          "raw": true,
+          "explain": "配列に `@csv` を使うと CSV の 1 行になります。見出し行を `,` で先に出しています。「生出力 (-r)」がオフだと、行全体が引用符で囲まれてしまう点に注意してください。",
+          "try": "`@csv` を `@tsv` にしてみましょう。"
+        },
+        {
+          "id": "json-string",
+          "title": "JSON 文字列との変換 tojson / fromjson",
+          "data": "shop",
+          "query": ".orders[0].customer | tojson, (tojson | fromjson | .name)",
+          "explain": "`tojson` は値を JSON 文字列に、`fromjson` は JSON 文字列を値に戻します。JSON の中に JSON 文字列が埋め込まれているデータを扱うときに使います。",
+          "try": "`tojson` を `@base64` にしてみましょう（`@base64d` で戻せます）。"
+        },
+        {
+          "id": "uri",
+          "title": "URL の組み立て @uri",
+          "data": "shop",
+          "query": ".products[] | \"https://example.com/search?q=\\(.name | @uri)\"",
+          "raw": true,
+          "explain": "`@uri` は URL に使えない文字をエンコードします。文字列埋め込みの前に `@uri` を書いて `@uri \"...\\(.name)\"` とすると、埋め込む部分だけをエンコードできます。",
+          "try": "`@uri \"https://example.com/search?q=\\(.name)\"` と書き換えてみましょう。"
+        }
+      ]
+    },
+    {
+      "id": "paths",
+      "title": "10. 更新と探索",
+      "samples": [
+        {
+          "id": "update",
+          "title": "値を更新する |=",
+          "data": "shop",
+          "query": ".products | map(.price |= . + 10 | {name, price})",
+          "explain": "`.price |= 式` は、その場所の値を式の結果で置き換えます（`+=` `*=` などの省略形もあります）。元の構造を保ったまま一部だけ変えたいときに使います。",
+          "try": "`map(...)` を外して `.products[].price *= 2` とし、全体がどう変わるか見てみましょう。"
+        },
+        {
+          "id": "delete",
+          "title": "キーを消す del",
+          "data": "shop",
+          "query": "del(.orders[].customer.email) | .orders | map(.customer)",
+          "explain": "`del(パス)` で指定した場所を削除します。個人情報を除いてから共有したいときなどに使えます。",
+          "try": "`del(.orders[].items)` にしてみましょう。"
+        },
+        {
+          "id": "with-entries",
+          "title": "キーを一括で変える with_entries",
+          "data": "shop",
+          "query": ".products[3] | with_entries(.key |= ascii_upcase | select(.value != []))",
+          "explain": "`with_entries(f)` は `to_entries | map(f) | from_entries` の省略形です。キー名の変換や、特定の値を持つキーの削除をまとめて行えます。",
+          "try": "`ascii_upcase` を `\"x_\" + .` にしてみましょう。"
+        },
+        {
+          "id": "recurse",
+          "title": "どこにあるか分からない値を探す ..",
+          "data": "shop",
+          "query": "[.. | .email? // empty]",
+          "explain": "`..` はすべての階層の値を順にたどります。`.email?` の `?` で、オブジェクト以外に対するエラーを無視しています。キーの場所が分からないときの調査に便利です。",
+          "try": "`.email` を `.qty` にしてみましょう。"
+        },
+        {
+          "id": "paths",
+          "title": "値のある場所（パス）を調べる paths",
+          "data": "shop",
+          "query": "[paths(type == \"number\") | map(tostring) | join(\".\")] | .[:6]",
+          "explain": "`paths(条件)` は条件を満たす値への「道順」を配列で返します。ここでは数値がある場所を `.` 区切りの文字列にして、先頭の 6 件を表示しています。",
+          "try": "`type == \"number\"` を `type == \"null\"` にしてみましょう。"
+        }
+      ]
+    }
+  ]
+}

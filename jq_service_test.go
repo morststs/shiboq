@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -216,15 +217,44 @@ func TestExtractUsedKeysParseError(t *testing.T) {
 	}
 }
 
-func TestExtractUsedKeysIgnoresBracketString(t *testing.T) {
-	// `.["weird key"]` のようなブラケット記法は対象外（ドット記法のみを扱う既知の制約）。
+func TestExtractUsedKeysBracketString(t *testing.T) {
+	// `.["weird key"]` のように文字列リテラルで指定したキーも対象にする
+	// （英数字以外のキー名は、ドット記法では書けずこの形になるため）。
 	s := NewJqService()
-	keys, err := s.ExtractUsedKeys(`.["weird key"]`)
+	keys, err := s.ExtractUsedKeys(`.["weird key"]["会員番号"]`)
 	if err != nil {
 		t.Fatalf("ExtractUsedKeys: %v", err)
 	}
-	if len(keys) != 0 {
-		t.Fatalf("keys = %v, want empty", keys)
+	sort.Strings(keys)
+	if len(keys) != 2 || keys[0] != "weird key" || keys[1] != "会員番号" {
+		t.Fatalf("keys = %v, want [weird key 会員番号]", keys)
+	}
+}
+
+func TestExtractUsedKeysQuotedDot(t *testing.T) {
+	// `."会員"` のように引用符で囲んだドット記法も対象にする。
+	s := NewJqService()
+	keys, err := s.ExtractUsedKeys(`."会員"[] | ."氏名"`)
+	if err != nil {
+		t.Fatalf("ExtractUsedKeys: %v", err)
+	}
+	sort.Strings(keys)
+	if len(keys) != 2 || keys[0] != "会員" || keys[1] != "氏名" {
+		t.Fatalf("keys = %v, want [会員 氏名]", keys)
+	}
+}
+
+func TestExtractUsedKeysIgnoresDynamicAndNumericIndex(t *testing.T) {
+	// 実行するまでキーが決まらない補間付きの文字列や、配列の数値インデックスは
+	// キー名として扱わない（補間の中で参照しているキーだけを拾う）。
+	s := NewJqService()
+	keys, err := s.ExtractUsedKeys(`.["\(.kind)_id"], ."x\(.n)", .[0]`)
+	if err != nil {
+		t.Fatalf("ExtractUsedKeys: %v", err)
+	}
+	sort.Strings(keys)
+	if len(keys) != 2 || keys[0] != "kind" || keys[1] != "n" {
+		t.Fatalf("keys = %v, want [kind n]", keys)
 	}
 }
 
@@ -413,5 +443,18 @@ func TestRunQuerySupportedRegexFlagsStillWork(t *testing.T) {
 	}
 	if r.Result != "true" {
 		t.Errorf("Result = %q, want %q", r.Result, "true")
+	}
+}
+
+func TestEngineInfoMatchesGoMod(t *testing.T) {
+	// ヘルプに表示するgojqのバージョンが、実際に組み込んでいるもの（go.mod）と
+	// 食い違わないようにする。gojqを更新したらgojqVersionも更新すること。
+	data, err := os.ReadFile("go.mod")
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+	want := "github.com/itchyny/gojq " + NewJqService().EngineInfo().EngineVersion
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("go.mod に %q がありません。gojqVersion を go.mod に合わせてください", want)
 	}
 }

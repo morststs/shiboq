@@ -121,6 +121,7 @@ shiboq/
 ├── wasm_main.go           # Web版のエントリポイント（//go:build js && wasm）。shiboqCallをJSへ公開
 ├── web_bridge.go          # Web版の呼び出しをJqServiceへ振り分ける（syscall/js非依存でテスト可能）
 ├── web_bridge_test.go     # web_bridge.goのテスト
+├── samples_test.go        # frontend/src/samples.json の全サンプルを実エンジンで実行して検査
 ├── jq_service_test.go     # jq_service.goのテスト（テストケースごとに個別のfunc、テーブル駆動ではない）
 ├── schema_test.go         # schema.goのテスト（同上）
 ├── saved_service_test.go  # saved_service.goのテスト（同上）
@@ -163,6 +164,10 @@ shiboq/
 │   │   ├── JsonPane.svelte     # 中央上ペイン：元のJSON（編集可、Monaco。「整形」ボタン）
 │   │   ├── SchemaPane.svelte   # 中央下ペイン：キーツリー（使用中キーをハイライト。JSON Schemaの「コピー」ボタン）
 │   │   ├── SchemaTreeNode.svelte # スキーマツリーの再帰描画コンポーネント
+│   │   ├── SamplesPane.svelte  # 左ペイン「サンプル」タブ：学習用サンプル（章の開閉・解説・やってみよう）
+│   │   ├── HelpDialog.svelte   # 「？ ヘルプ」ダイアログ（バージョン情報・早見表・困ったとき・使えない機能）
+│   │   ├── samples.json        # 学習用サンプルのデータ（datasets + chapters）
+│   │   ├── inlineCode.js       # 解説文のバッククォート部分を<code>に分ける（{@html}を使わない）
 │   │   ├── QueryPane.svelte    # 右上ペイン：jqクエリ入力（Monaco + 補完）
 │   │   └── ResultPane.svelte   # 右下ペイン：実行結果（読み取り専用Monaco）
 │   └── wailsjs/             # Wails自動生成バインディング（編集不可・`wails generate module`で再生成）
@@ -183,7 +188,8 @@ shiboq/
 | メソッド | 説明 |
 |---------|------|
 | `RunQuery(jsonText, query, raw)` | jqクエリを実行し `{result, error, errorKind}` を返す。エラー時は `error` に日本語メッセージ、`result` は空文字。複数出力（`.a, .b`等）は改行区切りで連結する。`raw` は jq の `-r` 相当で、true のとき結果が**文字列の場合に限り**引用符とエスケープを外す（文字列以外は raw によらずJSON表現のまま）。詳細は下記「RunQueryの実行制限とエラー種別」参照 |
-| `ExtractUsedKeys(query)` | クエリのASTを解析し、参照されているキー名一覧を返す（重複排除、順不同）。ドット記法（`.foo`）に加え、文字列補間（`"\(.name)"`）・単項演算子（`-.foo`）・分解パターン（`. as {a: $x}` や `reduce ... as {id: $i}`）内のキー参照も対象。`.["foo"]` のようなブラケット記法によるキー参照のみ対象外（既知の制約） |
+| `ExtractUsedKeys(query)` | クエリのASTを解析し、参照されているキー名一覧を返す（重複排除、順不同）。ドット記法（`.foo`）に加え、文字列補間（`"\(.name)"`）・単項演算子（`-.foo`）・分解パターン（`. as {a: $x}` や `reduce ... as {id: $i}`）内のキー参照も対象。引用符付きのドット記法（`."会員"`）と文字列リテラルのブラケット記法（`.["会員"]`）も対象（英数字以外のキー名はこの形でしか書けないため）。補間付きの文字列（`.["\(.k)_id"]`）や数値インデックスはキー名として扱わず、補間の中の参照だけを拾う |
+| `EngineInfo()` | ヘルプに表示する `{engine, engineVersion, jqLanguageVersion}`（`gojq` / `v0.12.19` / `1.7`）を返す。`gojqVersion`定数は`TestEngineInfoMatchesGoMod`がgo.modとの一致を検査する（gojqを上げたら定数も上げる）。`jqLanguageVersion`の根拠は下記「学習用サンプルとヘルプ」参照 |
 | `InferSchema(jsonText)` | JSONからキーツリー（型付き）を推論する（`schema.go`のInferSchemaを呼ぶだけ） |
 | `SchemaJSON(jsonText)` | JSONから推論したスキーマを、整形済み（2スペース）のJSON Schema文字列で返す（`schema.go`のInferJSONSchemaを呼ぶだけ）。スキーマペインの「コピー」用。詳細は下記「JSON Schemaの推論ルール」参照 |
 
@@ -366,6 +372,50 @@ JSON/クエリの変更のたびに500ms後に呼ばれるが、連続編集時�
 選択中の項目なら`selectedSavedId`を`null`に戻す（存在しないIDを指したままにしない）。
 両ダイアログとも`Esc`で閉じられる。
 
+## 学習用サンプルとヘルプ
+
+- **サンプル**（左ペインの「サンプル」タブ、`SamplesPane.svelte`）: `samples.json`の
+  `datasets`（`shop`・`members`・`logs`）と`chapters`（10章・43件）。各サンプルは
+  `{id, title, data, query, raw?, explain, try}`。選ぶと`App.loadSample()`が
+  `JSON.stringify(dataset, null, 2)`をJSONペインに、`query`をクエリに入れて即実行する。
+  `raw`は生出力(-r)をその値にするが**localStorageには保存しない**（利用者の設定を
+  上書きしない）。解説文のコードはバッククォートで囲む（`inlineCode.js`が`<code>`に分ける）。
+  **サンプルを追加・変更したら`go test`を実行する**: `samples_test.go`が全サンプルを
+  実エンジンで実行し、エラー・空結果・ID重複を検出する（`-v`で全結果を表示）。
+- 左ペインのタブは`localStorage`の`shiboq.leftTab`に保存。一度も選んでいない人には、
+  保存項目が空ならサンプルを先に見せる。保存したらタブを「保存」に切り替える
+  （サンプルを見ている最中のCtrl+Sでも、保存されたことが見えるように）。
+- **ヘルプ**（`HelpDialog.svelte`、クエリペインのヘッダー「？ ヘルプ」、Escで閉じる）:
+  バージョン情報は`EngineInfo()`から取る。外部リンクは`$backend`の`OpenURL`
+  （デスクトップはWailsの`BrowserOpenURL`で既定ブラウザ、Web版は`window.open`の別タブ）。
+  WebView内で直接開くとアプリ画面が外部サイトに置き換わるため`<a href>`は使わない。
+- **jqのバージョン表記の根拠**（2026-10-06に実測し、jq公式マニュアル v1.7/v1.8
+  （jqlang/jq の`docs/content/manual/`）と照合した）: jq 1.7の言語仕様に準拠。jq 1.8で
+  追加された`trimstr`・`trim`/`ltrim`/`rtrim`・`toboolean`・`add(f)`・`skip`は使える。
+  `keys_unsorted`・`$__loc__`・`input`/`inputs`・`input_filename`・`input_line_number`・
+  `debug`・`stderr`・jq 1.8の`have_literal_numbers`/`have_decnum`は使えない
+  （`halt`/`halt_error`は何も出力しない）。`leaf_paths`・`isvalid`・`toarray`・`@base32d`も
+  無いが、jq 1.7/1.8のマニュアルに載っていないので「使えない機能」には書いていない。
+  gojqを更新したら、ヘルプのこれらの記述も実測し直すこと。
+- **ヘルプに書いたエラーメッセージはgojqの文面**（jq本家と違う）:
+  `cannot iterate over: null`・`expected an object but got: array`・`cannot add: string and number`。
+- **英数字以外のキー名・関数名**: `{商品: .name}`・`.会員`・`def 税込:`はすべて構文エラー
+  （`unexpected token`）。`{"商品": .name}`・`."会員"`/`.["会員"]`と書く。関数名は英数字と`_`のみ。
+  サンプル作成時にこれで実際に全滅しかけた（`samples_test.go`が検出した）。
+- **Tailwindのユーティリティ名とクラス名が衝突する**: 自作の`class="grid"`が
+  Tailwindの`.grid { display: grid }`に上書きされ、ヘルプの表が崩れた（`cheat`に改名）。
+  `grid`・`flex`・`table`・`hidden`・`block`等、Tailwindのユーティリティと同じ名前の
+  クラスを自作のスタイルに使わないこと。
+- **動作確認**: Web版は`.devcache/e2e/learn.mjs`（playwright-core）で、初回のタブ・
+  サンプル読み込み・-rの切替・章の開閉・引用符付きキーのハイライト・全43件の実行・
+  ヘルプ（バージョン・リンク先・Esc）・保存とタブの永続化を確認した。Monacoの
+  `innerText`は空白がU+00A0（ノーブレークスペース）になるので、比較前に置換する。
+  デスクトップ版は`shiboq-gui`イメージ（Xvfb・xdotool・ImageMagick入り）で起動し、
+  サンプルの読み込みとヘルプ（Wails経由のEngineInfo）を画面で確認した。
+  **xdotoolで`title`付きのボタンを押すとき、ホバーで待つとGTKのツールチップが
+  出てmouseupを奪い、クリックが無視される**（`mousemove X Y click 1`と待たずに押す）。
+  デスクトップ版の外部リンク（ブラウザ起動）はコンテナに既定ブラウザが無く未確認。
+
 ## Web版（GitHub Pages）
 
 デスクトップ版と同じ`App.svelte`をブラウザで動かす。`vite.config.js`の`'$backend'`
@@ -542,7 +592,6 @@ Partner Centerの「ユーザー管理」でMicrosoft Entra IDのアプリを登
   結果ペイン（ResultPane）は検証無しの簡易Monarchトークナイザ（`'jq-result'`）を持つ
 - 補完・使用キーハイライトはフラットなキー名一致であり、jqのパイプ位置に応じた
   文脈依存の絞り込みは行わない
-- `.["キー名"]` のようなブラケット記法によるキー参照は、使用キー抽出の対象外
 - **正規表現フラグは `g` / `i` / `m` の3つのみ**（`test` / `match` / `capture` / `scan`
   / `splits` / `sub` / `gsub`）。jq本家（Oniguruma）が対応する `x`（空白とコメントを
   無視する拡張モード）・`s`・`n`・`p`・`l` は使えない。内蔵する gojq が Go の

@@ -202,9 +202,41 @@ func (s *JqService) SchemaJSON(jsonText string) (string, error) {
 	return InferJSONSchema(jsonText)
 }
 
+// 内蔵するjqエンジンと、準拠するjq言語仕様のバージョン。ヘルプに表示する。
+// gojqVersion は go.mod の github.com/itchyny/gojq と一致させる
+// （TestEngineInfoMatchesGoMod が食い違いを検出する）。
+//
+// jqLanguageVersion は「マニュアルのどの版を見ればよいか」の目安。
+// gojq v0.12.19 は jq 1.7 の言語仕様に沿っており、jq 1.8 で追加された関数の一部
+// （trimstr / trim / toboolean / add(f) / skip）も使える。一方で jq 1.8 の
+// have_literal_numbers / have_decnum や、1.7 からある keys_unsorted・$__loc__ は
+// 使えない（実測。jq公式マニュアルv1.7/v1.8と照合し、ヘルプの「使えない機能」に
+// 列挙している）ため、1.8 ではなく 1.7 としている。
+const (
+	gojqVersion       = "v0.12.19"
+	jqLanguageVersion = "1.7"
+)
+
+// EngineInfo はヘルプに表示するjqエンジンの情報。
+type EngineInfo struct {
+	Engine            string `json:"engine"`
+	EngineVersion     string `json:"engineVersion"`
+	JqLanguageVersion string `json:"jqLanguageVersion"`
+}
+
+// EngineInfo は内蔵するjqエンジンと、準拠するjq言語仕様のバージョンを返す。
+func (s *JqService) EngineInfo() EngineInfo {
+	return EngineInfo{
+		Engine:            "gojq",
+		EngineVersion:     gojqVersion,
+		JqLanguageVersion: jqLanguageVersion,
+	}
+}
+
 // ExtractUsedKeys はjqクエリのAST（抽象構文木）を解析し、
-// `.foo` のようなドットによるフィールドアクセスで参照されているキー名の
-// 一覧を返す（重複排除、順不同）。`.["foo"]` のようなブラケット記法は対象外。
+// `.foo`・`."foo"`・`.["foo"]` のようなフィールドアクセスで参照されているキー名の
+// 一覧を返す（重複排除、順不同）。補間付きの文字列など、実行するまでキー名が
+// 決まらないものは対象外。
 func (s *JqService) ExtractUsedKeys(query string) ([]string, error) {
 	q, err := gojq.Parse(query)
 	if err != nil {
@@ -310,8 +342,37 @@ func collectIndexKey(idx *gojq.Index, set map[string]bool) {
 	if idx.Name != "" {
 		set[idx.Name] = true
 	}
+	// `."会員"`（引用符付きのドット記法）。英数字以外のキー名はこう書く必要がある。
+	if idx.Str != nil {
+		if len(idx.Str.Queries) == 0 {
+			set[idx.Str.Str] = true
+		}
+		// 補間付き（`."x\(.n)"`）はキーが実行時まで決まらないので、補間の中だけを見る
+		for _, q := range idx.Str.Queries {
+			walkQueryForKeys(q, set)
+		}
+	}
+	// `.["会員"]`（文字列リテラルのブラケット記法）。数値インデックスやスライス、
+	// 補間付きの文字列は対象外で、中の式だけを下の walk で見る。
+	if !idx.IsSlice && idx.End == nil {
+		if key, ok := literalStringQuery(idx.Start); ok {
+			set[key] = true
+		}
+	}
 	walkQueryForKeys(idx.Start, set)
 	walkQueryForKeys(idx.End, set)
+}
+
+// literalStringQuery は q が補間を含まない文字列リテラルだけの式なら、その文字列を返す。
+func literalStringQuery(q *gojq.Query) (string, bool) {
+	if q == nil || q.Term == nil || q.Op != 0 || q.Left != nil || q.Right != nil {
+		return "", false
+	}
+	t := q.Term
+	if t.Type != gojq.TermTypeString || t.Str == nil || len(t.Str.Queries) != 0 || len(t.SuffixList) != 0 {
+		return "", false
+	}
+	return t.Str.Str, true
 }
 
 func walkPatternForKeys(p *gojq.Pattern, set map[string]bool) {
