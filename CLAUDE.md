@@ -525,10 +525,23 @@ GitHubのRelease本文は、Store版（とWeb版）へのリンクを先頭に�
 使えない人向けに引き続き添付している。リリースノート本体は従来どおり注釈付きタグの
 メッセージに書く（Release本文には入らない）。
 
-### 更新の出し方（自動公開。2026-10-06に仕組みを用意、Entra側の準備は未完了）
+### 更新の出し方（半自動で運用）
 
-`v*`タグをpushすると`msix.yml`がMSIXをビルドし、`msstore publish`でStoreへ申請して認定に出す。
-利用者向けの準備手順・運用・トラブルシュートは[`docs/store-auto-publish.md`](./docs/store-auto-publish.md)。
+**運用は半自動**（2026-10-06にユーザーが決定）: `v*`タグのpushで`msix.yml`がMSIXをビルドし
+（Artifact `shiboq-msix`）、ユーザーがそれを`gh run download <run-id> -n shiboq-msix`で取得して、
+Partner Centerで「更新」→パッケージを差し替え→送信する。
+
+申請まで自動にする仕組み（下記）も`msix.yml`に入っているが**使っていない**。Microsoft Entraの
+テナントが必要で、ユーザーは個人のMicrosoftアカウント（MSA）しか持っていないため。
+entra.microsoft.comに個人アカウントで入ると、自分のテナントではなくMSA用の共通テナント
+「Microsoft Services」（`f8cdef31-a31e-4b4a-93e4-5f571e91255a`）が表示され、
+`AADSTS16000 … does not exist in tenant 'Microsoft Services' … (ADIbizaUX)`になる。
+全自動にするにはPartner Centerの Account settings → Organization profile → Tenants で
+新しいEntra IDを作り、その管理者（`○○@○○.onmicrosoft.com`）で作業する必要がある。
+ユーザーには難しかったので見送った。**リポジトリ変数`MSSTORE_*`が未設定なので、申請ジョブは
+タグのpushでも自動でスキップされ、何もしない。** 準備手順は[`docs/store-auto-publish.md`](./docs/store-auto-publish.md)。
+
+以下は全自動の仕組みの設計メモ（使う場合のため）。
 
 - **MSIXのバージョン**: タグ`vX.Y.Z`→`(X+1).Y.Z`（`v0.4.0`→`1.4.0`）。Storeは先頭0不可で、
   公開中より大きい番号が必要なため。手動実行では`version`を指定する。
@@ -550,12 +563,11 @@ GitHubのRelease本文は、Store版（とWeb版）へのリンクを先頭に�
   作り直す**（初回申請時を除く）。前回の`.msix`は`PendingDelete`にして新しいものに差し替える。
   登録情報は公開中の申請から引き継がれる。publishに渡すのは`.msix`のパス（`MSIXProjectPublisher`が
   拡張子で判定）と`--appId 9MV10MVFX78Z`（Store ID）。
-- **未確認**: Entraアプリ・フェデレーション資格情報・変数がまだ無いため、`publish-store`ジョブは
-  一度も実行していない。準備ができたら`gh workflow run msix.yml -f version=1.4.0 -f publish=draft`で
-  初回確認する（v0.4.0の内容をStoreに出すことにもなる）。Partner Centerの画面名は
+- **未確認**: Entraアプリ・フェデレーション資格情報・変数が無いため、`publish-store`ジョブは
+  一度も実行していない。使う場合は`-f publish=draft`で初回確認する。Partner Centerの画面名は
   msstore CLIのソース（`CLIConfigurator.cs`の案内文）から取った英語表記で、日本語UIの表記は未確認。
-- 手動で出す場合（自動公開が使えないとき）: `gh workflow run msix.yml -f version=X.Y.Z`→
-  `gh run download <run-id> -n shiboq-msix`→Partner Centerで製品→「更新」→パッケージを差し替え→送信。
+- タグを打たずにMSIXだけ作り直す場合: `gh workflow run msix.yml -f version=X.Y.Z`（`publish`は`none`）。
+- v0.4.0用のMSIX 1.4.0は手動実行`37461278716`で作成済み（2026-10-06）。Storeへの申請はユーザーが手で行う。
 
 ### 提出で分かった注意点
 

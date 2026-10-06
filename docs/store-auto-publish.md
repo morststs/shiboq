@@ -1,5 +1,11 @@
 # Microsoft Store への自動公開
 
+> **現在は使っていません（2026-10-06）。** Store への更新は半自動（タグの push で MSIX を
+> 自動ビルドし、Partner Center へは手でアップロードする）で運用しています（README 参照）。
+> この仕組みには Microsoft Entra のテナント（`○○@○○.onmicrosoft.com` のような組織用の
+> アカウント）が必要で、個人の Microsoft アカウントだけでは準備できないためです。
+> 下記の準備を済ませてリポジトリ変数を設定すれば、そのまま使えます（設定するまでは申請しません）。
+
 `v*` タグを push すると、GitHub Actions（[`msix.yml`](../.github/workflows/msix.yml)）が
 MSIX をビルドし、Microsoft Store Developer CLI（`msstore`）で Store へ申請して認定に出します。
 
