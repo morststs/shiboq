@@ -8,6 +8,9 @@ import JqWorker from './jq.worker.js?worker';
 
 export { SaveItem, ListSaved, DeleteSaved } from './webSaved.js';
 
+// Web版にだけ出すもの（アプリ版への案内など）の切り替えに使う。
+export const IS_WEB = true;
+
 // Go側のJqService.Timeout（5秒）と同じ値。wasmにはプリエンプションが無く、
 // `def f: f; f`のようなCPUを占有し続けるクエリではGo側のタイムアウトが
 // 発火しない（実測）。そのためメインスレッド側でWorkerごと打ち切る。

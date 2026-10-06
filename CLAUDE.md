@@ -443,6 +443,11 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
   同じ規則（UUID発行・同一内容でも新規保存・新しい順・UUID以外は除外）。
 - **ファイルを開く:** `<input type="file">`。20MB上限と文言はデスクトップ版と同じ。
 - **クリップボード:** `navigator.clipboard.writeText`（Pagesはhttpsなので使える）。
+- **アプリ版への案内:** Web版だけ、左ペインの下に「Windows アプリ版」（Microsoft Storeへの
+  普通のリンク）を出す。`$backend`の`IS_WEB`（web.jsは`true`、wails.jsは`false`）で切り替える。
+  Microsoftの公式バッジ（`get.microsoft.com/badge/ms-store-badge.bundled.js`の`<ms-store-badge>`）は
+  **使わない**: ページを開くたびに外部スクリプトを読み込み、PRIVACY.mdの「GitHub以外からは
+  何も読み込まない」と、外部CDNを使わない方針に反するため（2026-10-06にユーザーから提案があり見送った）。
 - **公開:** `.github/workflows/pages.yml`がmainへのpushごとにビルドして公開する。
   リポジトリのPages設定はSourceが「GitHub Actions」。CIでは`go test`を実行しない
   （Wailsのcgo依存と`frontend/dist`が必要なため）。`GOOS=js go vet`のみ。

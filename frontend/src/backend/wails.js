@@ -8,3 +8,6 @@ export { ClipboardSetText } from '../../wailsjs/runtime/runtime';
 // WebView内でリンクを開くとアプリの画面が外部サイトに置き換わってしまうため、
 // 既定のブラウザで開く。
 export { BrowserOpenURL as OpenURL } from '../../wailsjs/runtime/runtime';
+
+// Web版にだけ出すもの（アプリ版への案内など）の切り替えに使う。
+export const IS_WEB = false;

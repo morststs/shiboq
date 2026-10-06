@@ -21,7 +21,13 @@
     DeleteSaved,
     EngineInfo,
     OpenURL,
+    IS_WEB,
   } from '$backend';
+
+  // Web版からデスクトップ版（Microsoft Store）への案内。Microsoftの公式バッジ
+  // （get.microsoft.comのスクリプト）は、ページを開くたびに外部へ通信するため使わない
+  // （PRIVACY.mdの「GitHub以外からは何も読み込まない」と、外部CDNを使わない方針に反する）。
+  const STORE_URL = 'https://apps.microsoft.com/detail/9MV10MVFX78Z';
 
   const SAMPLE_JSON = '{\n  "name": "taro",\n  "age": 20,\n  "tags": ["admin", "user"],\n  "address": {\n    "city": "tokyo"\n  }\n}';
 
@@ -423,6 +429,12 @@
         />
       {/if}
     </div>
+    {#if IS_WEB}
+      <a class="app-link" href={STORE_URL} target="_blank" rel="noopener noreferrer" title="Microsoft Store を開きます">
+        <span class="app-link-title">Windows アプリ版</span>
+        <span class="app-link-sub">Microsoft Store から無料で入手 ↗</span>
+      </a>
+    {/if}
   </div>
   <!-- ドラッグ操作のみのリサイズハンドル。sirusita（参考プロジェクト）のsplitterと同じ
        パターンで、キーボード操作の代替手段は無い（既知の制約、将来的にはrole="separator"
@@ -540,6 +552,27 @@
   .left-body {
     flex: 1;
     min-height: 0;
+  }
+  .app-link {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    padding: 8px 10px;
+    border-top: 1px solid #3c3c3c;
+    color: #cccccc;
+    text-decoration: none;
+  }
+  .app-link:hover {
+    background: #2a2d2e;
+  }
+  .app-link-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: #4fc1ff;
+  }
+  .app-link-sub {
+    font-size: 11px;
+    color: #969696;
   }
   .splitter {
     width: 5px;
