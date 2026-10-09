@@ -162,6 +162,43 @@ JSON:
 （貼り付けたあと「整形」を押すと見やすくなる。）Store のスクリーンショットは横 1366×縦 768 以上の PNG。
 アプリの初期ウィンドウは 1280×800 なので、最大化してから撮る。
 
+## 1.4.0 の更新（v0.4.0: 学習用サンプルとヘルプ）
+
+**入力されたかは未確認**（2026-10-06に提案）。パッケージ `shiboq.msix` 1.4.0.0 はアップロード済み。
+入力が確認できたら、上の「Store 登録情報」本体に反映してこの節を整理する。
+
+### このバージョンの新機能（任意の欄。ユーザーは場所が分からなかった）
+
+```
+・jq を順を追って学べるサンプルを追加しました（10 章 43 個の例題）。選ぶと JSON とクエリに読み込まれ、解説を見ながら書き換えて試せます。
+・「？ ヘルプ」を追加しました。構文の早見表、よく使う関数、困ったときの Q&A、対応している jq のバージョン（jq 1.7 準拠）を確認できます。
+・."会員" のように引用符で書いたキーも、スキーマで「使用中」と表示されるようにしました。
+```
+
+### 説明に追加する箇条書き（「・jq の -r に相当する…」の下）
+
+```
+・jq を基礎から学べるサンプル（10 章 43 個の例題）を収録しています
+・構文の早見表や困ったときの Q&A をまとめたヘルプがあります
+```
+
+説明の最後の「インターネットへの通信は行いません」はそのままでよい（ヘルプのリンクは押したときに
+ブラウザで開くだけで、アプリ自体は通信しない）。
+
+### 製品の機能に追加
+
+```
+jq を基礎から学べるサンプル（10 章 43 例題）
+構文の早見表・Q&A をまとめたヘルプ
+```
+
+### 追加のテスト情報に追加（How to test の 4 の後）
+
+```
+5. Open the "サンプル" (Samples) tab in the left pane and click a sample. Its JSON and query are loaded into the editors and run immediately, with an explanation below the sample title.
+6. Press "？ ヘルプ" (Help) in the query pane header to open the help dialog. Links in the help (jq manual, gojq on GitHub) open in the default web browser only when clicked; the app itself still makes no network requests.
+```
+
 ## 申請オプション
 
 - 公開の保留: 「認定されたらすぐに…公開する」

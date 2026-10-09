@@ -512,16 +512,29 @@ App.svelte側に分岐は無い。Web版の出力先は`frontend/dist-web`（`go
 
 ## Microsoft Storeへの提出（Partner Center）
 
-### 状況（2026-10-06時点）
+### 状況（2026-10-09時点）
 
-- 製品「shiboq」（Store ID `9MV10MVFX78Z`）は**Storeで公開済み**（ユーザーから2026-10-06に報告。
-  ストアのページは`https://apps.microsoft.com/detail/9MV10MVFX78Z`。開発環境からは
-  apps.microsoft.comに接続できず、ページの表示はこちらでは確認していない）。
-- 公開中のパッケージは`shiboq.msix` v1.0.0.0。msix.ymlの`4aa0d28`での実行（2026-10-02）で
-  ビルドしたもの。その後v0.3.0までにWindows版へ入った変更は、Web版対応のための
-  ビルドタグ追加とバックエンド呼び出しの整理（`$backend`）だけで、利用者から見た
-  機能は同じ。そのためv0.3.0に合わせたStoreの更新は不要と判断した。
-  （2026-10-05のmsix.yml実行`b13caa2`はActions更新の動作確認用で、Storeには出していない）
+- 製品「shiboq」（Store ID `9MV10MVFX78Z`）は**Storeで公開済み**（ユーザーから2026-10-06に報告）。
+  ストアのページ`https://apps.microsoft.com/detail/9MV10MVFX78Z`は、ユーザーが開発環境からの
+  接続を許可したあと（2026-10-06）、タイトル「shiboq - Free download and install on Windows |
+  Microsoft Store」で開けることを確認した。Partner Centerは`https://partner.microsoft.com/dashboard`
+  →「アプリとゲーム」→ shiboq（製品ページを直接開くURLは未確認）。
+- 最初に公開したのは`shiboq.msix` v1.0.0.0（msix.ymlの`4aa0d28`での実行、2026-10-02）。
+- **v0.4.0（サンプル・ヘルプ）向けのMSIX 1.4.0.0を、ユーザーが2026-10-06にPartner Centerへ
+  アップロードした**（手動実行`37461278716`で作成し、`gh run download`で`tmp/msix-1.4.0/`に
+  取得したもの。中のIdentityは`morststs.shiboq`/`CN=CE782894-…`/`1.4.0.0`で確認済み）。
+  **送信したか・認定を通ったかは未確認**。次のセッションで最初にユーザーに確認すること。
+- その申請で更新を勧めた登録情報（新機能・説明・製品の機能・追加のテスト情報）の文面は
+  [`docs/store-submission.md`](./docs/store-submission.md)の「1.4.0 の更新」に控えた。
+  **実際に入力されたかは未確認**（ユーザーは「このバージョンの新機能」欄が見つからなかった。
+  任意の欄なので、見つからなければ飛ばしてよいと伝えた）。入力済みと分かったら、同ファイルの
+  「Store 登録情報」本体に反映して「1.4.0 の更新」の注記を外す。
+- v0.3.0はWindows版の利用者から見た機能がv1.0.0.0と同じだったため、Storeを更新しなかった
+  （2026-10-05のmsix.yml実行`b13caa2`はActions更新の動作確認用で、Storeには出していない）。
+- **Store用スクリーンショット**: ユーザーのPCでは未署名のexe（Releaseのzip）がスマート アプリ
+  コントロールに止められるため、新しい画面を撮る方法として、(1) こちらで`shiboq-gui`イメージ
+  （Xvfb）かChromiumで撮る（1366×768以上のPNG。フォントがWindowsと少し違う）、(2) Web版を
+  F11で全画面にしてWin+Shift+Sで撮る、(3) Windowsサンドボックス、を提案した。どれにするかは未定。
 - 入力した値・文章はすべて[`docs/store-submission.md`](./docs/store-submission.md)に控えてある。
   再提出や作り直しのときはそこから転記する。
 
